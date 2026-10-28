@@ -863,7 +863,7 @@ endif()
 endif()
 add_subdirectory(lib/Tempest/Engine)
 if(ANDROID)
-  add_dependencies(Gothic2Notr driverbridge main_hook hook_impl c11_threads_compat)
+  add_dependencies(Gothic2Notr driverbridge main_hook hook_impl)
 endif()
 '''
 )
@@ -881,7 +881,6 @@ replace_once(
                 targets.add('driverbridge')
                 targets.add('main_hook')
                 targets.add('hook_impl')
-                targets.add('c11_threads_compat')
 '''
 )
 
@@ -909,7 +908,7 @@ add_subdirectory(vendor/libadrenotools)
 add_library(driverbridge SHARED driver_bridge.cpp)
 target_compile_options(driverbridge PRIVATE -Wall -Wextra -Werror -fvisibility=hidden)
 target_link_libraries(driverbridge PRIVATE adrenotools log dl)
-add_dependencies(driverbridge main_hook hook_impl c11_threads_compat)
+add_dependencies(driverbridge main_hook hook_impl)
 ''', encoding="utf-8")
 
 (bridge_dir / "driver_bridge.cpp").write_text(r'''#include <jni.h>
