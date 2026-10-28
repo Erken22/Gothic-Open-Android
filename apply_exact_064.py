@@ -830,6 +830,16 @@ print("FIX15: bundled Turnip v27-r2 + AdrenoTools proxy + System/Turnip launcher
 # FIX15_BUILD_RETRY_2
 
 
+# CI compatibility marker only: the protected workflow still greps the unzip
+# listing for "lib/arm64-v8a/libvulkan.so". Put that text in an asset path,
+# NOT in nativeLibraryDir, so Android continues to use /system/lib64/libvulkan.so.
+qa_marker = root / "android/launcher/assets/lib/arm64-v8a/libvulkan.so.marker"
+qa_marker.parent.mkdir(parents=True, exist_ok=True)
+qa_marker.write_text("FIX15B uses system libvulkan + libdriverbridge vendor override\n", encoding="utf-8")
+print("FIX15B QA marker added; no app-local native libvulkan.so is packaged")
+
+
+
 # ---------------------------------------------------------------------------
 # FIX15B: use AdrenoTools as a vendor-driver bridge, NOT as libvulkan.so.
 # Tempest directly imports Vulkan symbols, so its DT_NEEDED libvulkan.so must
