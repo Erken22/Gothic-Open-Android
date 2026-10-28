@@ -80,6 +80,84 @@ new_safe = '''#if defined(__ANDROID__)
 replace_once("common/graphics/safegpu.cpp", old_safe, new_safe)
 
 
+
+# Adreno 650: the second supplied logcat no longer crashes while compiling a
+# graphics pipeline. It crashes later inside Qualcomm Vulkan while executing
+# Renderer::buildHiZ -> VCommandBuffer::dispatch. In SafeGpu::Minimal, disable
+# HiZ occlusion completely and use ordinary frustum visibility for V_Main.
+replace_once(
+    "common/graphics/renderer.cpp",
+    '#include "graphics/inventoryrenderer.h"\n',
+    '#include "graphics/inventoryrenderer.h"\n#include "graphics/safegpu.h"\n'
+)
+
+replace_once(
+    "common/graphics/renderer.cpp",
+'''void Renderer::drawHiZ(Encoder<CommandBuffer>& cmd, WorldView& view) {
+  cmd.setDebugMarker("HiZ-occluders");
+''',
+'''void Renderer::drawHiZ(Encoder<CommandBuffer>& cmd, WorldView& view) {
+  if(SafeGpu::isMinimal())
+    return;
+  cmd.setDebugMarker("HiZ-occluders");
+'''
+)
+
+replace_once(
+    "common/graphics/renderer.cpp",
+'''void Renderer::buildHiZ(Tempest::Encoder<Tempest::CommandBuffer>& cmd) {
+  assert(hiz.hiZ.w()<=128 && hiz.hiZ.h()<=128); // shader limitation
+''',
+'''void Renderer::buildHiZ(Tempest::Encoder<Tempest::CommandBuffer>& cmd) {
+  if(SafeGpu::isMinimal())
+    return;
+  assert(hiz.hiZ.w()<=128 && hiz.hiZ.h()<=128); // shader limitation
+'''
+)
+
+replace_once(
+    "common/graphics/drawcommands.cpp",
+'''    const auto viewport = SceneGlobals::VisCamera(v);
+    if(viewport==SceneGlobals::V_HiZ && pass!=0)
+''',
+'''    const auto viewport = SceneGlobals::VisCamera(v);
+    if(SafeGpu::isMinimal() && viewport==SceneGlobals::V_HiZ)
+      continue;
+    if(viewport==SceneGlobals::V_HiZ && pass!=0)
+'''
+)
+
+replace_once(
+    "common/graphics/drawcommands.cpp",
+'''    auto* pso = &Shaders::inst().visibilityPassSh;
+    if(viewport==SceneGlobals::V_Main)
+      pso = &Shaders::inst().visibilityPassHiZ;
+''',
+'''    auto* pso = &Shaders::inst().visibilityPassSh;
+    if(viewport==SceneGlobals::V_Main && !SafeGpu::isMinimal())
+      pso = &Shaders::inst().visibilityPassHiZ;
+'''
+)
+
+# The Russian script set contains a BL instruction whose target address has no
+# function symbol. ZenKit's lenient handler already ignores that branch and
+# continues, but it logs it as an error first, which OpenGothic turns into the
+# red "ERROR OF THE SCRIPTS" overlay. Preserve the exact lenient behavior
+# (skip this bad branch) without stopping the player on that known harmless case.
+replace_once(
+    "common/game/gamescript.cpp",
+'''  vm.register_exception_handler([](zenkit::DaedalusVm& v, const zenkit::DaedalusScriptError& exc, const zenkit::DaedalusInstruction& instr) {
+    const auto ret = zenkit::lenient_vm_exception_handler(v,exc,instr);
+''',
+'''  vm.register_exception_handler([](zenkit::DaedalusVm& v, const zenkit::DaedalusScriptError& exc, const zenkit::DaedalusInstruction& instr) {
+    const std::string_view what(exc.what());
+    if(instr.op==zenkit::DaedalusOpcode::BL && what.starts_with("bl: no symbol found for address "))
+      return zenkit::DaedalusVmExceptionStrategy::CONTINUE;
+    const auto ret = zenkit::lenient_vm_exception_handler(v,exc,instr);
+'''
+)
+
+
 # This build has no Steam login/download/import/update UI. Keep only the Java
 # classes required by the direct-folder launcher and the native game activity.
 java_dir = root / "android/java/org/opengothic/app"
