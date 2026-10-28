@@ -1,0 +1,98 @@
+name: Hotfix direct-folder VDF check
+
+on:
+  push:
+    paths:
+      - '.github/workflows/hotfix-vdf.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download current Adreno Safe APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir input
+          gh release download direct-folder-latest \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'OpenGothic-Gothic2-DirectFolder-Adreno650Safe-arm64.apk' \
+            --dir input
+          cp input/*.apk base.apk
+
+      - name: Download apktool and Android build tools
+        run: |
+          curl -fL https://github.com/iBotPeaches/Apktool/releases/download/v2.12.1/apktool_2.12.1.jar -o apktool.jar
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0"
+
+      - name: Decode APK
+        run: java -jar apktool.jar d -f base.apk -o decoded
+
+      - name: Disable only the over-strict VDF validator
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          matches = list(Path("decoded").glob("smali*/org/opengothic/app/GameFiles.smali"))
+          if len(matches) != 1:
+              raise SystemExit(f"Expected one GameFiles.smali, found: {matches}")
+          p = matches[0]
+          s = p.read_text(encoding="utf-8")
+
+          pat = re.compile(
+              r'(?ms)^\.method\s+static\s+brokenArchives\(Ljava/io/File;\)Ljava/util/List;.*?^\.end method\s*$'
+          )
+          repl = '''.method static brokenArchives(Ljava/io/File;)Ljava/util/List;
+              .locals 1
+
+              new-instance v0, Ljava/util/ArrayList;
+
+              invoke-direct {v0}, Ljava/util/ArrayList;-><init>()V
+
+              return-object v0
+          .end method'''
+          s2, n = pat.subn(repl, s, count=1)
+          if n != 1:
+              raise SystemExit("brokenArchives method not found")
+          p.write_text(s2, encoding="utf-8")
+          print("Patched", p)
+          PY
+
+      - name: Rebuild and sign APK
+        run: |
+          java -jar apktool.jar b decoded -o unsigned.apk
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          "$BT/zipalign" -f 4 unsigned.apk aligned.apk
+          keytool -genkeypair -v \
+            -keystore hotfix.keystore -storepass android \
+            -alias androiddebugkey -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA -keysize 2048 -validity 10000
+          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650Safe-NoVdfCheck-arm64.apk"
+          "$BT/apksigner" sign \
+            --ks hotfix.keystore --ks-pass pass:android --key-pass pass:android \
+            --out "$OUT" aligned.apk
+          "$BT/apksigner" verify --verbose "$OUT"
+          "$BT/aapt" dump badging "$OUT" | head -n 12 | tee apk-badging.txt
+          "$BT/aapt" dump permissions "$OUT" | tee apk-permissions.txt
+          grep -q "android.permission.MANAGE_EXTERNAL_STORAGE" apk-permissions.txt
+          sha256sum "$OUT" | tee apk-sha256.txt
+
+      - name: Publish hotfix APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete direct-folder-vdf-hotfix --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create direct-folder-vdf-hotfix \
+            OpenGothic-Gothic2-DirectFolder-Adreno650Safe-NoVdfCheck-arm64.apk \
+            apk-badging.txt apk-permissions.txt apk-sha256.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "OpenGothic Direct Folder - VDF check hotfix" \
+            --notes "Same Adreno 650 SafeGpu native build. Only the launcher-side VDF signature check is disabled because it rejected an installation that the engine itself can read." \
+            --prerelease
