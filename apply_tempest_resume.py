@@ -116,11 +116,14 @@ replace_once(
   }
 
 void AndroidApi::updateFocus() {
-  const bool next = resumed && focused && hasWindow;
+  // Rendering must not depend on GAINED_FOCUS. Some MIUI builds can restore
+  // the NativeWindow/RESUME before focus arrives (or delay focus indefinitely),
+  // which otherwise leaves a valid swapchain permanently black.
+  const bool next = resumed && hasWindow;
   if(active!=next) {
     active = next;
     if(mainWindow!=nullptr) {
-      FocusEvent event(active,Event::FocusReason::UnknownReason);
+      FocusEvent event(focused && active,Event::FocusReason::UnknownReason);
       AndroidApi::dispatchFocus(*mainWindow,event);
       }
     }
