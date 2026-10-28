@@ -1,8 +1,8 @@
-name: Build Exact Gothic Launcher 0.6.4 FIX12
+name: Build Exact Gothic Launcher 0.6.4 FIX13
 
 on:
   push:
-    branches: [main]
+    branches: [fix13-exact064-build]
     paths:
       - apply_exact_064.py
       - .github/workflows/build.yml
@@ -92,7 +92,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
           test -n "$APK"
 
-          OUT="GothicLauncher-arm64-Exact064-FIX12-SAVE-HIZ.apk"
+          OUT="GothicLauncher-arm64-Exact064-FIX13-IME-CULL-PERF.apk"
           base64 -d .ci/gothic_fix2.keystore.b64 > gothic_fix2.keystore
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" aligned-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
@@ -112,14 +112,14 @@ jobs:
           # intentionally retains -g symbols before APK packaging.
           SYMBOL="$(find src/build/android -type f -name 'libopengothic.so' -printf '%s %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
           test -n "$SYMBOL"
-          cp "$SYMBOL" libopengothic-FIX12-unstripped.so
-          file libopengothic-FIX12-unstripped.so | tee symbols-info.txt
-          sha256sum libopengothic-FIX12-unstripped.so | tee symbols-sha256.txt
+          cp "$SYMBOL" libopengothic-FIX13-unstripped.so
+          file libopengothic-FIX13-unstripped.so | tee symbols-info.txt
+          sha256sum libopengothic-FIX13-unstripped.so | tee symbols-sha256.txt
 
-      - name: Publish FIX12 release
+      - name: Publish FIX13 release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release delete exact-064-fix12 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          gh release create exact-064-fix12             GothicLauncher-arm64-Exact064-FIX12-SAVE-HIZ.apk             libopengothic-FIX12-unstripped.so             apk-badging.txt apk-permissions.txt apk-sha256.txt             symbols-info.txt symbols-sha256.txt             --repo "$GITHUB_REPOSITORY"             --title "Gothic Launcher 0.6.4 FIX12 — save + Adreno 650 graphics"             --notes "Exact Solessfir/OpenGothic 0.6.4 source (7896a643...) and pinned Tempest (8c7c47fc...). Direct Folder is integrated in source. Adreno 650 uses OpenGothic flat material varyings and non-bindless material path. Android save-name IME queues no stale key-up after the widget closes. HiZ remains enabled, uses R32F and conservative bounds/depth bias to prevent false occlusion. No rendering feature is disabled. Unstripped native library is attached for exact future crash symbolication."             --prerelease
+          gh release delete exact-064-fix13 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create exact-064-fix13             GothicLauncher-arm64-Exact064-FIX13-SAVE-HIZ.apk             libopengothic-FIX13-unstripped.so             apk-badging.txt apk-permissions.txt apk-sha256.txt             symbols-info.txt symbols-sha256.txt             --repo "$GITHUB_REPOSITORY"             --title "Gothic Launcher 0.6.4 FIX13 — save + Adreno 650 graphics"             --notes "Exact Solessfir/OpenGothic 0.6.4 source (7896a643...) and pinned Tempest (8c7c47fc...). Direct Folder is integrated in source. Adreno 650 keeps flat material varyings while regaining flat+bindless material shaders. Android save-name IME restores normal text key pairs while editor Enter stays down-only. HiZ stays R16 and enabled, uses conservative cluster spheres plus a two-pass no-global-atomic reducer. No scene effect, shadow quality or render resolution is disabled. Unstripped native library is attached for exact future crash symbolication."             --prerelease
