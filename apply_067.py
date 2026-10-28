@@ -439,6 +439,7 @@ replace_once(
     '''    packagingOptions {
         jniLibs {
             useLegacyPackaging = true
+            pickFirsts += ["**/libc++_shared.so"]
         }
     }
     androidResources {

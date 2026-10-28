@@ -77,7 +77,7 @@ jobs:
         shell: bash
         run: |
           GRADLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.9/bin/gradle"
-          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" -S src -B src/build/android -G Ninja             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.0.12077973/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_PLATFORM=android-24             -DCMAKE_BUILD_TYPE="$BUILD_TYPE"             -DOPENGOTHIC_ANDROID_GAME=launcher             -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$GRADLE"
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" -S src -B src/build/android -G Ninja             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.0.12077973/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_STL=c++_shared             -DCMAKE_ANDROID_STL_TYPE=c++_shared             -DANDROID_PLATFORM=android-24             -DCMAKE_BUILD_TYPE="$BUILD_TYPE"             -DOPENGOTHIC_ANDROID_GAME=launcher             -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$GRADLE"
 
       - name: Build release APK
         shell: bash
@@ -146,6 +146,21 @@ jobs:
             needed.txt
             vulkan-exports.txt
           retention-days: 30
+
+      - name: Preserve failed linkage diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FIX19-linkage-diagnostics
+          path: |
+            packaged-libopengothic.so
+            packaged-libvulkan.so
+            needed.txt
+            vulkan-exports.txt
+            apk-signature.txt
+            apk-badging.txt
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Publish GitHub release
         env:
