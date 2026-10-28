@@ -30,6 +30,19 @@ replace_once(
 )
 
 replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.h",
+'''    static bool processTouchEvents(AppCallBack& cb);
+    static void updateFocus();
+    static void updateWindow();
+''',
+'''    static bool processTouchEvents(AppCallBack& cb);
+    static void updateFocus();
+    static void updateWindow();
+    static void applyPendingWindowReset();
+'''
+)
+
+replace_once(
     "lib/Tempest/Engine/system/api/androidapi.cpp",
 '''static bool             active     = false;
 static bool             hasWindow  = false;
@@ -85,7 +98,7 @@ replace_once(
     }
   }
 ''',
-'''static void applyPendingWindowReset() {
+'''void AndroidApi::applyPendingWindowReset() {
   if(!windowResetPending || !active || !hasWindow || mainWindow==nullptr || androidWindow.native==nullptr)
     return;
 
