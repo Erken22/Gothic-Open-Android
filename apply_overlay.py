@@ -288,7 +288,9 @@ replace_once(
       const auto& shadow = *scene.shadowMap[viewport-SceneGlobals::V_Shadow0];
 ''',
 '''    if(viewport==SceneGlobals::V_Main) {
-      push.minObjectPixels = 0.35f;
+      // Never screen-size cull visible scene objects. At 50% mobile rendering
+      // tiny props (bottles, clutter) otherwise cross the threshold and flicker.
+      push.minObjectPixels = 0.f;
       }
     else if(SceneGlobals::isShadowView(viewport)) {
       push.minObjectPixels = 0.5f;
@@ -421,11 +423,10 @@ replace_once(
 #endif
 ''',
 '''#if defined(HIZ)
-  const uint hizBucketId = cluster.bucketId_commandId >> 16;
-  const bool dynamicGeometry =
-      cluster.instanceId!=0xFFFFFFFF &&
-      (bucket[hizBucketId].flags & (BK_SKIN | BK_MORPH | BK_WATER))!=0;
-  bool useHiZ = !dynamicGeometry;
+  // HiZ is kept for the baked world/landscape where it removes the most work.
+  // Instanced VOBs (bottles, furniture, props, characters) use stable
+  // frustum+distance visibility so they cannot flicker from occlusion history.
+  bool useHiZ = (cluster.instanceId==0xFFFFFFFF);
   const vec2 projectedSpan = max(aabb.zw-aabb.xy,vec2(0));
   if(max(projectedSpan.x,projectedSpan.y)>0.10)
     useHiZ = false;
@@ -537,7 +538,121 @@ dep_end = ct.index(dep_end_marker, dep_start) + len(dep_end_marker)
 ct = ct[:dep_start] + '    )' + ct[dep_end:]
 cmake.write_text(ct, encoding="utf-8")
 
-print("Direct-folder + selective HiZ + triple-buffer + dynamic visibility optimization + FPS profiling applied")
+print("Direct-folder + stable VOB visibility + triple-buffer + detailed CPU profiling applied")
+
+# Detailed CPU frame profiler. Runtime FPS logs show gpuFenceBusy=0, so the
+# current bottleneck is not waiting for the GPU fence. Measure the CPU stages
+# without changing rendering quality, so the next device log identifies the
+# real optimization target.
+replace_once(
+    "common/mainwindow.cpp",
+    '#include <Tempest/Log>\n',
+    '#include <Tempest/Log>\n#include <chrono>\n'
+)
+
+replace_once(
+    "common/mainwindow.cpp",
+'''  try {
+    static uint64_t time=Application::tickCount();
+''',
+'''  try {
+    static uint64_t time=Application::tickCount();
+#if defined(__ANDROID__)
+    using PerfClock = std::chrono::steady_clock;
+    const auto perfFrameStart = PerfClock::now();
+    static uint64_t perfTickUs=0, perfUiUs=0, perfEncodeUs=0;
+    static uint64_t perfSubmitUs=0, perfPresentUs=0, perfFrameUs=0;
+    static uint32_t perfFrameCount=0;
+#endif
+'''
+)
+
+replace_once(
+    "common/mainwindow.cpp",
+'''      tickCamera(dt);
+      }
+''',
+'''      tickCamera(dt);
+#if defined(__ANDROID__)
+      const auto perfTickEnd = PerfClock::now();
+#endif
+      }
+'''
+)
+
+replace_once(
+    "common/mainwindow.cpp",
+'''    inventory.setCovered(document.isActive() || chapter.isActive() || video.isActive());
+
+    CommandBuffer& cmd = commands[cmdId];
+''',
+'''    inventory.setCovered(document.isActive() || chapter.isActive() || video.isActive());
+
+#if defined(__ANDROID__)
+    const auto perfUiEnd = PerfClock::now();
+#endif
+    CommandBuffer& cmd = commands[cmdId];
+'''
+)
+
+replace_once(
+    "common/mainwindow.cpp",
+'''#endif
+    }
+    sync = device.submit(cmd);
+    device.present(swapchain);
+''',
+'''#endif
+    }
+#if defined(__ANDROID__)
+    const auto perfEncodeEnd = PerfClock::now();
+#endif
+    sync = device.submit(cmd);
+#if defined(__ANDROID__)
+    const auto perfSubmitEnd = PerfClock::now();
+#endif
+    device.present(swapchain);
+#if defined(__ANDROID__)
+    const auto perfPresentEnd = PerfClock::now();
+    auto us = [](auto a, auto b)->uint64_t {
+      return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(b-a).count());
+      };
+    perfTickUs    += us(perfFrameStart,perfTickEnd);
+    perfUiUs      += us(perfTickEnd,perfUiEnd);
+    perfEncodeUs  += us(perfUiEnd,perfEncodeEnd);
+    perfSubmitUs  += us(perfEncodeEnd,perfSubmitEnd);
+    perfPresentUs += us(perfSubmitEnd,perfPresentEnd);
+    perfFrameUs   += us(perfFrameStart,perfPresentEnd);
+    ++perfFrameCount;
+#endif
+'''
+)
+
+replace_once(
+    "common/mainwindow.cpp",
+'''      Log::i("Runtime FPS: ",fps.get(),", target=",
+             AndroidInput::preferences().fps,", frameLimitMs=",maxFpsInv,
+             ", gpuFenceBusy=",gpuFenceBusy);
+      gpuFenceBusy = 0;
+''',
+'''      Log::i("Runtime FPS: ",fps.get(),", target=",
+             AndroidInput::preferences().fps,", frameLimitMs=",maxFpsInv,
+             ", gpuFenceBusy=",gpuFenceBusy);
+      if(perfFrameCount>0) {
+        const double k = 1.0/(1000.0*double(perfFrameCount));
+        Log::i("Frame CPU avg ms: tick=",double(perfTickUs)*k,
+               ", ui=",double(perfUiUs)*k,
+               ", encode=",double(perfEncodeUs)*k,
+               ", submit=",double(perfSubmitUs)*k,
+               ", present=",double(perfPresentUs)*k,
+               ", total=",double(perfFrameUs)*k,
+               ", frames=",perfFrameCount);
+        }
+      perfTickUs=perfUiUs=perfEncodeUs=perfSubmitUs=perfPresentUs=perfFrameUs=0;
+      perfFrameCount=0;
+      gpuFenceBusy = 0;
+'''
+)
 
 # Resume-safe swapchain teardown: presentation may outlive frame fences.
 replace_once(
