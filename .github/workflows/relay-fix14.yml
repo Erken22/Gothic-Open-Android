@@ -28,8 +28,10 @@ jobs:
         shell: bash
         run: |
           FILE="GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk"
+          ZIP="GothicLauncher-FIX14-relay.zip"
+          zip -0 "$ZIP" "$FILE"
           RESP="$(curl --connect-timeout 20 --max-time 240 --fail --silent --show-error \
-            -F "files[]=@$FILE" https://uguu.se/upload)"
+            -F "files[]=@$ZIP;type=application/zip" https://uguu.se/upload)"
           URL="$(printf '%s' "$RESP" | jq -r '.files[0].url // empty')"
           test "$URL" != ""
           echo "FIX14_RELAY_URL=$URL"
