@@ -29,7 +29,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch --orphan fix14-delivery
-          git rm -rf .
+          git rm -rf . || true
           cp /tmp/GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk .
           printf "FIX14 delivery branch\n" > README.txt
           git add .
