@@ -49,7 +49,7 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git Vulkan-Headers
           mkdir -p VulkanSDK/include
-          cp -a Vulkan-Headers/include/vulkan VulkanSDK/include/
+          cp -a Vulkan-Headers/include/. VulkanSDK/include/
           echo "VULKAN_SDK=$GITHUB_WORKSPACE/VulkanSDK" >> "$GITHUB_ENV"
 
       - name: Install Android build dependencies
