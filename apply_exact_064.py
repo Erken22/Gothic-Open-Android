@@ -738,6 +738,19 @@ endif()
 '''
 )
 
+# Gradle's explicit native target filter otherwise packages only Gothic2Notr.
+# Add the proxy and the two AdrenoTools hook libraries as first-class APK targets.
+replace_once(
+    "lib/Tempest/Engine/cmake/android/build.gradle.in",
+    """                targets.add(@NATIVE_TARGET@)
+""",
+    """                targets.add(@NATIVE_TARGET@)
+                targets.add('vulkan')
+                targets.add('main_hook')
+                targets.add('hook_impl')
+"""
+)
+
 # Package the pinned Turnip ZIP as an asset.
 replace_once(
     "android/CMakeLists.txt",
