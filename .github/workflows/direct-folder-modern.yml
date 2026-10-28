@@ -1,5 +1,5 @@
-name: Build Modern Direct Folder GraphicsFix5
-# workflow revision: graphicsfix5-upstream-meshlets-resume-v3
+name: Build Modern Direct Folder GraphicsFix6
+# workflow revision: graphicsfix6-fps60-deferred-resume
 
 on:
   push:
@@ -71,7 +71,7 @@ jobs:
         run: |
           {
             echo '#pragma once'
-            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix5 $GITHUB_SHA\";"
+            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix6 $GITHUB_SHA\";"
           } > src/game/build.h
 
       - name: Configure Android ARM64
@@ -112,7 +112,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
 
           test -n "$APK"
-          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix5-arm64.apk"
+          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix6-arm64.apk"
           cp "$APK" "$OUT"
 
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUT"
@@ -127,9 +127,9 @@ jobs:
         run: |
           gh release delete direct-folder-modern-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           gh release create direct-folder-modern-latest \
-            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix5-arm64.apk \
+            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix6-arm64.apk \
             apk-permissions.txt apk-badging.txt apk-sha256.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --title "OpenGothic Modern Direct Folder - GraphicsFix5" \
-            --notes "Modern Android fork / ARM64 Release. Restores upstream full meshlet ranges (removes Android-only meshlet LOD that could hide heads/parts of walls and props). HiZ stays enabled for static world geometry, while dynamic and large near-camera clusters use frustum/distance only. Adreno 650 keeps the two-pass HiZ reducer with explicit dependencies. Resume rebuilds the Android Vulkan surface/swapchain exactly once per surface generation to avoid BufferQueue maxImages/black-screen failures." \
+            --title "OpenGothic Modern Direct Folder - GraphicsFix6" \
+            --notes "Modern Android fork / ARM64 Release. Keeps GraphicsFix5 geometry fixes. Migrates stale 30 FPS mobile profiles to 60 FPS and logs real runtime FPS. Android lifecycle now treats active as resumed+focused+hasWindow and defers exactly one Vulkan surface/swapchain recreation until the new NativeWindow is actually active; GPU/presentation work is drained before destroying the old surface." \
             --prerelease
