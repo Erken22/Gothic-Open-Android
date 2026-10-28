@@ -1,0 +1,126 @@
+name: Package OpenGothic checkpoint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/package-checkpoint.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 50
+
+      - name: Download latest tested APK candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p checkpoint/apk
+          gh release download direct-folder-modern-latest \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix5-arm64.apk' \
+            --dir checkpoint/apk
+
+      - name: Collect current source checkpoint
+        shell: bash
+        run: |
+          mkdir -p checkpoint/source checkpoint/metadata
+
+          cp -a apply_overlay.py checkpoint/source/
+          cp -a apply_tempest_resume.py checkpoint/source/
+          [ -f apply_exact_064.py ] && cp -a apply_exact_064.py checkpoint/source/ || true
+          cp -a overlay checkpoint/source/
+          mkdir -p checkpoint/source/.github
+          cp -a .github/workflows checkpoint/source/.github/
+
+          [ -f README.md ] && cp README.md checkpoint/source/ || true
+
+          git rev-parse HEAD > checkpoint/metadata/builder-commit.txt
+          git log --oneline -30 > checkpoint/metadata/recent-commits.txt
+
+          cat > checkpoint/CHECKPOINT.md <<'EOF'
+          # OpenGothic Android checkpoint — 2026-10-29
+
+          ## Current build
+          - Track: modern Android fork / direct-folder mode
+          - APK: OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix5-arm64.apk
+          - Architecture: ARM64
+          - Build type: Release
+          - Game data: read directly from selected existing Gothic II NotR folder
+          - Saves/settings: app-local
+
+          ## Implemented fixes
+          - Direct folder without ZIP import or data duplication.
+          - Adreno 650 shader compiler crash workaround.
+          - Adreno 650 two-pass HiZ reducer.
+          - Conservative visibility bounds.
+          - Android-only meshlet LOD removed; upstream full meshlet ranges restored.
+          - HiZ restricted to safer static geometry; dynamic/near geometry uses frustum/distance culling.
+          - Mobile 30 FPS default migrated to 60 FPS.
+          - Shadow/mobile visibility adjustments.
+          - NativeActivity TERM_WINDOW no longer intentionally exits the game.
+          - Resume path tracks Android NativeWindow generations and forces Vulkan surface/swapchain rebuild once per surface generation.
+
+          ## Last user-observed state before this checkpoint
+          - Graphics became noticeably more stable; disappearing/glitching objects, walls and player model were reduced.
+          - Black screen after minimize/restore still existed before GraphicsFix5 was tested.
+          - FPS remained lower than desired unless graphics were reduced.
+          - GraphicsFix5 was built specifically to address remaining partial-geometry loss, resume double-reset/BufferQueue issue, and to use Release optimization.
+          - GraphicsFix5 has not yet been user-validated at the time this checkpoint was created.
+
+          ## Latest log available in the chat
+          - logcat_recording_2026-10-28_14-05-48.zip
+          - The raw uploaded logcat stays in the ChatGPT conversation; it is not embedded here because this GitHub packaging job cannot access conversation attachments.
+
+          ## Next work
+          1. Test GraphicsFix5 for head/wall/object disappearance.
+          2. Minimize/restore repeatedly and capture logcat if black screen remains.
+          3. Profile actual frame bottleneck without lowering image quality.
+          4. Keep HiZ/occlusion/shadows functional; optimize implementation rather than disabling features.
+          EOF
+
+          # Snapshot of tracked working files, explicitly excluding signing material.
+          mkdir -p checkpoint/source-snapshot
+          git ls-files -z | while IFS= read -r -d '' f; do
+            case "$f" in
+              .ci/*|*.keystore|*.jks|*.p12|*.pem) continue ;;
+            esac
+            mkdir -p "checkpoint/source-snapshot/$(dirname "$f")"
+            cp -a "$f" "checkpoint/source-snapshot/$f"
+          done
+
+      - name: Add release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view direct-folder-modern-latest --repo "$GITHUB_REPOSITORY" \
+            --json tagName,name,publishedAt,url,assets > checkpoint/metadata/latest-release.json
+          sha256sum checkpoint/apk/*.apk > checkpoint/metadata/apk-sha256.txt
+
+      - name: Create archive
+        run: |
+          ZIP="OpenGothic-Android-CHECKPOINT-2026-10-29.zip"
+          zip -9 -r "$ZIP" checkpoint
+          sha256sum "$ZIP" > checkpoint-archive-sha256.txt
+          ls -lh "$ZIP"
+
+      - name: Publish checkpoint release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete checkpoint-2026-10-29 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create checkpoint-2026-10-29 \
+            OpenGothic-Android-CHECKPOINT-2026-10-29.zip \
+            checkpoint-archive-sha256.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "OpenGothic Android checkpoint 2026-10-29" \
+            --notes "Full working checkpoint: current patches/workflows/overlay, sanitized source snapshot, latest GraphicsFix5 APK, commit/release metadata and current project state. Signing secrets are excluded." \
+            --prerelease
