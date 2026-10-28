@@ -918,6 +918,7 @@ add_dependencies(driverbridge main_hook hook_impl)
 #include <dlfcn.h>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
 #include <mutex>
 #include <string>
 #include <vector>
