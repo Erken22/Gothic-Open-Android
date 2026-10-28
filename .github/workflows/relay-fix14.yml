@@ -41,3 +41,9 @@ jobs:
           echo "GOFILE_FILE_ID=$FILEID"
           echo "GOFILE_FOLDER_ID=$FOLDER"
           echo "GOFILE_GUEST_TOKEN=$TOKEN"
+          META="$(curl --connect-timeout 20 --max-time 60 --fail --silent --show-error \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://api.gofile.io/contents/$FOLDER")"
+          echo "$META" | jq .
+          LINK="$(printf '%s' "$META" | jq -r --arg id "$FILEID" '.data.children[$id].link // .data.children[$id].directLink // empty')"
+          echo "GOFILE_DIRECT_LINK=$LINK"
