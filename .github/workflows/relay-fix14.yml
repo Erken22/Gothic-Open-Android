@@ -28,10 +28,16 @@ jobs:
         shell: bash
         run: |
           FILE="GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk"
-          ZIP="GothicLauncher-FIX14-relay.zip"
-          zip -0 "$ZIP" "$FILE"
-          RESP="$(curl --connect-timeout 20 --max-time 240 --fail --silent --show-error \
-            -F "files[]=@$ZIP;type=application/zip" https://uguu.se/upload)"
-          URL="$(printf '%s' "$RESP" | jq -r '.files[0].url // empty')"
-          test "$URL" != ""
-          echo "FIX14_RELAY_URL=$URL"
+          RESP="$(curl --connect-timeout 20 --max-time 300 --fail --silent --show-error \
+            -F "file=@$FILE" https://upload.gofile.io/uploadfile)"
+          echo "$RESP" | jq .
+          STATUS="$(printf '%s' "$RESP" | jq -r '.status // empty')"
+          test "$STATUS" = "ok"
+          PAGE="$(printf '%s' "$RESP" | jq -r '.data.downloadPage // .data.downloadPageUrl // empty')"
+          FILEID="$(printf '%s' "$RESP" | jq -r '.data.fileId // .data.id // empty')"
+          FOLDER="$(printf '%s' "$RESP" | jq -r '.data.parentFolder // .data.folderId // empty')"
+          TOKEN="$(printf '%s' "$RESP" | jq -r '.data.guestToken // empty')"
+          echo "GOFILE_PAGE=$PAGE"
+          echo "GOFILE_FILE_ID=$FILEID"
+          echo "GOFILE_FOLDER_ID=$FOLDER"
+          echo "GOFILE_GUEST_TOKEN=$TOKEN"
