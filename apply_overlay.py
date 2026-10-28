@@ -357,8 +357,8 @@ replace_once(
     execute_process(
 ''',
 '''  if(NOT OG_TEMPEST_PATCHED EQUAL 0)
-    file(READ "\${OG_TEMPEST_DIR}/Engine/system/api/androidapi.h" OG_TEMPEST_ANDROIDAPI_H)
-    string(FIND "\${OG_TEMPEST_ANDROIDAPI_H}" "nativeWindow(SystemApi::Window* w)" OG_TEMPEST_RESUME_MARKER)
+    file(READ "${OG_TEMPEST_DIR}/Engine/system/api/androidapi.h" OG_TEMPEST_ANDROIDAPI_H)
+    string(FIND "${OG_TEMPEST_ANDROIDAPI_H}" "nativeWindow(SystemApi::Window* w)" OG_TEMPEST_RESUME_MARKER)
     if(NOT OG_TEMPEST_RESUME_MARKER EQUAL -1)
       # The normal OpenGothic patch was applied by the first configure and the
       # post-config Android lifecycle patch extended those same files.
