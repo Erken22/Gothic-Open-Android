@@ -555,3 +555,101 @@ replace_once(
 
 print("FIX13: IME typing restored, conservative cluster bounds, two-pass HiZ, flat-bindless Adreno650")
 
+# ---------------------------------------------------------------------------
+# FIX14: Adreno 650 driver-safe visibility fallback
+#
+# Upstream OpenGothic #744 reproduced the same "NPC/object appears in pieces"
+# failure on a mobile Vulkan driver and isolated it to the HiZ visibility
+# variants. On the old Qualcomm driver used by Adreno 650, keep GPU-driven
+# batching and frustum culling but do not let HiZ mip/descriptor results reject
+# scene geometry. This is a driver workaround, not a quality reduction.
+# ---------------------------------------------------------------------------
+replace_once(
+    "common/graphics/drawcommands.cpp",
+    '#include <Tempest/Log>\n',
+    '#include <Tempest/Log>\n#include <cstring>\n'
+)
+
+old_visibility = '''void DrawCommands::visibilityPass(Encoder<CommandBuffer>& cmd, int pass) {
+  static bool freeze = false;
+  if(freeze)
+    return;
+
+  cmd.setFramebuffer({});
+  if(pass==0) {
+    for(auto& v:views) {
+      if(this->cmd.empty())
+        continue;
+      if(!isViewEnabled(v.viewport))
+        continue;
+      const uint32_t isMeshShader = (Shaders::options().doMeshShading ? 1 : 0);
+      cmd.setBinding(T_Indirect, v.indirectCmd);
+      cmd.setPushData(&isMeshShader, sizeof(isMeshShader));
+      cmd.setPipeline(Shaders::inst().clusterInit);
+      cmd.dispatchThreads(this->cmd.size());
+      }
+    }
+
+  for(uint8_t v=0; v<SceneGlobals::V_Count; ++v) {
+'''
+new_visibility = '''void DrawCommands::visibilityPass(Encoder<CommandBuffer>& cmd, int pass) {
+  static bool freeze = false;
+  if(freeze)
+    return;
+
+  static const bool adreno650VisibilityFallback = []() {
+#if defined(__ANDROID__)
+    const char* name = Resources::device().properties().name;
+    const bool match = name!=nullptr && std::strstr(name,"Adreno")!=nullptr &&
+                       std::strstr(name,"650")!=nullptr;
+    if(match)
+      Log::i("Visibility: Adreno 650 frustum-only fallback enabled; HiZ rejection bypassed");
+    return match;
+#else
+    return false;
+#endif
+    }();
+
+  cmd.setFramebuffer({});
+  if(pass==0) {
+    for(auto& v:views) {
+      if(this->cmd.empty())
+        continue;
+      if(!isViewEnabled(v.viewport))
+        continue;
+      const uint32_t isMeshShader = (Shaders::options().doMeshShading ? 1 : 0);
+      cmd.setBinding(T_Indirect, v.indirectCmd);
+      cmd.setPushData(&isMeshShader, sizeof(isMeshShader));
+      cmd.setPipeline(Shaders::inst().clusterInit);
+      cmd.dispatchThreads(this->cmd.size());
+      }
+    // On Adreno 650 the coarse HiZ visibility pass is the driver-sensitive
+    // path. Indirect command buffers are initialized above; leave the HiZ
+    // occluder list empty and let the main pass use frustum-only visibility.
+    if(adreno650VisibilityFallback)
+      return;
+    }
+
+  for(uint8_t v=0; v<SceneGlobals::V_Count; ++v) {
+'''
+replace_once("common/graphics/drawcommands.cpp", old_visibility, new_visibility)
+
+old_pso = '''    auto* pso = &Shaders::inst().visibilityPassSh;
+    if(viewport==SceneGlobals::V_Main)
+      pso = &Shaders::inst().visibilityPassHiZ;
+    else if(viewport==SceneGlobals::V_HiZ)
+      pso = &Shaders::inst().visibilityPassHiZCr;
+'''
+new_pso = '''    auto* pso = &Shaders::inst().visibilityPassSh;
+    if(!adreno650VisibilityFallback) {
+      if(viewport==SceneGlobals::V_Main)
+        pso = &Shaders::inst().visibilityPassHiZ;
+      else if(viewport==SceneGlobals::V_HiZ)
+        pso = &Shaders::inst().visibilityPassHiZCr;
+      }
+'''
+replace_once("common/graphics/drawcommands.cpp", old_pso, new_pso)
+
+print("FIX14: Adreno 650 frustum-only visibility fallback; HiZ no longer rejects scene geometry")
+
+
