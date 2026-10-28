@@ -406,8 +406,27 @@ replace_once(
       }
     }
 ''',
-'''  const uint meshletId  = cluster.firstMeshlet;
-  const uint meshletCount = uint(cluster.meshletCount);
+'''  uint meshletId  = cluster.firstMeshlet;
+  uint meshletCount = uint(cluster.meshletCount);
+
+  // Restore LOD only for non-animated static VOBs and only far away.
+  // Characters/morph/water always keep full meshlet ranges, preventing the
+  // missing-head/body-part regression while recovering distant geometry cost.
+  if(instanceId!=0xFFFFFFFF && (cluster.lod.x!=0 || cluster.lod.z!=0)) {
+    const uint lodFlags = bucket[bucketId].flags;
+    if((lodFlags & (BK_SKIN | BK_MORPH | BK_WATER))==0) {
+      const vec3 offset = cluster.sphere.xyz-scene.camPos;
+      const float radius = max(cluster.sphere.w,1.0);
+      const float distanceSquared = dot(offset,offset);
+      if(distanceSquared>2304.0*radius*radius && cluster.lod.z>0) {
+        meshletId = cluster.lod.z;
+        meshletCount = cluster.lod.w;
+        } else if(distanceSquared>576.0*radius*radius && cluster.lod.x>0) {
+        meshletId = cluster.lod.x;
+        meshletCount = cluster.lod.y;
+        }
+      }
+    }
 '''
 )
 
@@ -423,12 +442,19 @@ replace_once(
 #endif
 ''',
 '''#if defined(HIZ)
-  // HiZ is kept for the baked world/landscape where it removes the most work.
-  // Instanced VOBs (bottles, furniture, props, characters) use stable
-  // frustum+distance visibility so they cannot flicker from occlusion history.
-  bool useHiZ = (cluster.instanceId==0xFFFFFFFF);
+  const uint hzBucketId = cluster.bucketId_commandId >> 16;
+  const uint hzFlags = bucket[hzBucketId].flags;
+  const bool dynamicVisual = (hzFlags & (BK_SKIN | BK_MORPH | BK_WATER))!=0;
   const vec2 projectedSpan = max(aabb.zw-aabb.xy,vec2(0));
-  if(max(projectedSpan.x,projectedSpan.y)>0.10)
+  const vec3 hzOffset = cluster.sphere.xyz-scene.camPos;
+  const float hzDist2 = dot(hzOffset,hzOffset);
+  const float safeNear = max(150.0,cluster.sphere.w*6.0);
+
+  // Characters/morph/water and large/near geometry stay conservative.
+  // Far static VOBs can use HiZ again, which restores the main occlusion
+  // performance win without bringing back close-range popping.
+  bool useHiZ = !dynamicVisual;
+  if(max(projectedSpan.x,projectedSpan.y)>0.12 || hzDist2<safeNear*safeNear)
     useHiZ = false;
   if(useHiZ && !hiZTest(aabb, depthMin))
     return;
@@ -538,7 +564,7 @@ dep_end = ct.index(dep_end_marker, dep_start) + len(dep_end_marker)
 ct = ct[:dep_start] + '    )' + ct[dep_end:]
 cmake.write_text(ct, encoding="utf-8")
 
-print("Direct-folder + stable VOB visibility + triple-buffer + detailed CPU profiling applied")
+print("Direct-folder + safe far-static LOD + selective HiZ + triple-buffer profiling applied")
 
 # Resume-safe swapchain teardown: presentation may outlive frame fences.
 replace_once(
