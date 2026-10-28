@@ -1,4 +1,5 @@
 name: Build OpenGothic 0.6.7 FIX16 DirectFolder
+# CI probe for FIX16
 
 on:
   push:
