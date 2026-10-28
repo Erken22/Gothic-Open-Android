@@ -224,15 +224,37 @@ replace_once(
       isExit.store(true);
       break;
 ''',
-'''    case APP_CMD_TERM_WINDOW:
-      // Losing the NativeWindow is a suspend, not an application close.
+'''    case APP_CMD_TERM_WINDOW: {
+      // NativeActivity still gives us the old ANativeWindow while handling
+      // TERM_WINDOW. Tear Vulkan presentation down immediately, before Android
+      // destroys the BufferQueue, instead of carrying acquired images into the
+      // next surface generation.
       hasWindow = false;
       windowInvalidated = true;
-      windowResetPending = true;
+      windowResetPending = false;
       releaseAllTouches();
       updateFocus();
-      Log::i("Android window suspended (TERM_WINDOW), keeping game alive");
+
+      ANativeWindow* oldWindow = androidWindow.native;
+      androidWindow.native = nullptr;
+      androidWindow.width  = 0;
+      androidWindow.height = 0;
+
+      if(mainWindow!=nullptr) {
+        SizeEvent event(0,0);
+        AndroidApi::dispatchResize(*mainWindow,event);
+        }
+
+      if(retiredWindow!=nullptr) {
+        ANativeWindow_release(retiredWindow);
+        retiredWindow = nullptr;
+        }
+      if(oldWindow!=nullptr)
+        ANativeWindow_release(oldWindow);
+
+      Log::i("Android window suspended: Vulkan surface released, game kept alive");
       break;
+      }
     case APP_CMD_DESTROY:
       hasWindow = false;
       updateFocus();
@@ -378,10 +400,15 @@ replace_once(
 '''void VSwapchain::reset() {
   cleanupSwapchain();
 #if defined(__ANDROID__)
-  // A resumed NativeActivity can have a different ANativeWindow even at the
-  // same size. The old VkSurfaceKHR must be destroyed before recreating the
-  // swapchain against the current AndroidWindowHandle.
+  // Surface lifetime follows ANativeWindow lifetime. TERM_WINDOW intentionally
+  // clears the current native handle: destroy the old VkSurfaceKHR and remain
+  // suspended. INIT_WINDOW later installs the new handle and reset recreates
+  // both the surface and swapchain.
   cleanupSurface();
+  if(AndroidApi::nativeWindow(hwnd)==nullptr) {
+    swapChainExtent = {};
+    return;
+    }
 #endif
   createSwapchain(device);
   }
@@ -419,4 +446,4 @@ replace_once(
 '''
 )
 
-print("Post-config Tempest settled Android suspend/resume patch applied")
+print("Post-config Tempest immediate TERM release + settled resume patch applied")
