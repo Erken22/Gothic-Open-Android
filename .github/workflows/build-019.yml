@@ -123,10 +123,27 @@ jobs:
           "$NM" -D --defined-only packaged-libvulkan.so | tee vulkan-exports.txt
           grep -q "opengothic_vulkan_is_turnip" vulkan-exports.txt
           grep -q "vkGetInstanceProcAddr" vulkan-exports.txt
+          if grep -Eq " (__gxx_personality_v0|__cxa_throw)$" vulkan-exports.txt; then
+            echo "ERROR: Vulkan proxy exports C++ exception runtime"
+            exit 1
+          fi
 
           strings packaged-libopengothic.so | grep -F "OpenGothic 0.6.7 FIX19 Turnip"
           sha256sum "$OUT" | tee apk-sha256.txt
           echo "FIX19 Turnip packaging/linkage verification: PASS"
+
+      - name: Upload verified FIX19 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenGothic-FIX19-verified
+          path: |
+            GothicLauncher-arm64-OpenGothic067-FIX19-TURNIP.apk
+            apk-sha256.txt
+            apk-signature.txt
+            apk-badging.txt
+            needed.txt
+            vulkan-exports.txt
+          retention-days: 30
 
       - name: Publish GitHub release
         env:

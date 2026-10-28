@@ -460,7 +460,9 @@ if(ANDROID)
   add_library(vulkan SHARED android/turnip/vulkan_proxy.cpp)
   target_include_directories(vulkan PRIVATE "$ENV{VULKAN_SDK}/include")
   target_link_libraries(vulkan PRIVATE dl log)
-  set_target_properties(vulkan PROPERTIES OUTPUT_NAME "vulkan")
+  target_link_options(vulkan PRIVATE "-Wl,--exclude-libs,ALL")
+  set_target_properties(vulkan PROPERTIES OUTPUT_NAME "vulkan"
+    CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
 endif()
 
 # Tempest
