@@ -28,35 +28,8 @@ jobs:
         shell: bash
         run: |
           FILE="GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk"
-          URL=""
-
-          # transfer.sh
-          URL="$(curl --connect-timeout 20 --max-time 180 --fail --silent --show-error \
-            --upload-file "$FILE" \
-            "https://transfer.sh/$(basename "$FILE")" || true)"
-          if [[ "$URL" != https://* ]]; then
-            URL=""
-          fi
-
-          # pixeldrain
-          if [[ -z "$URL" ]]; then
-            RESP="$(curl --connect-timeout 20 --max-time 180 --fail --silent --show-error \
-              -T "$FILE" https://pixeldrain.com/api/file/ || true)"
-            ID="$(printf '%s' "$RESP" | jq -r '.id // empty' 2>/dev/null || true)"
-            if [[ -n "$ID" ]]; then
-              URL="https://pixeldrain.com/api/file/$ID"
-            fi
-          fi
-
-          # tmpfiles
-          if [[ -z "$URL" ]]; then
-            RESP="$(curl --connect-timeout 20 --max-time 180 --fail --silent --show-error \
-              -F "file=@$FILE" https://tmpfiles.org/api/v1/upload || true)"
-            TMP="$(printf '%s' "$RESP" | jq -r '.data.url // empty' 2>/dev/null || true)"
-            if [[ "$TMP" == https://tmpfiles.org/* ]]; then
-              URL="${TMP/https:\/\/tmpfiles.org\//https:\/\/tmpfiles.org\/dl\/}"
-            fi
-          fi
-
-          test -n "$URL"
+          RESP="$(curl --connect-timeout 20 --max-time 240 --fail --silent --show-error \
+            -F "files[]=@$FILE" https://uguu.se/upload.php)"
+          URL="$(printf '%s' "$RESP" | jq -r '.files[0].url // empty')"
+          test "$URL" != ""
           echo "FIX14_RELAY_URL=$URL"
