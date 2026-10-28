@@ -6,6 +6,14 @@ mkdir -p "$JNI" "$GITHUB_WORKSPACE/src/android/turnip"
 
 python3 overlay/gen_vulkan_proxy.py   Vulkan-Headers/registry/vk.xml   src/android/turnip/vulkan_proxy.cpp
 
+CLANG="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++"
+"$CLANG" --target=aarch64-none-linux-android24 \
+  --sysroot="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
+  -std=c++20 -fsyntax-only \
+  -I"$GITHUB_WORKSPACE/VulkanSDK/include" \
+  src/android/turnip/vulkan_proxy.cpp
+echo "Vulkan proxy syntax check: PASS"
+
 curl -fL --retry 3   -o turnip-r6.zip   https://github.com/StevenMXZ/Adreno-Tools-Drivers/releases/download/v37/Turnip_v26.3.0-R6.zip
 echo "5fa2305eb9eff64d9347a670e6ca5ef7c518f60e9e782a4db7ee5588c9852d81  turnip-r6.zip" | sha256sum -c -
 
