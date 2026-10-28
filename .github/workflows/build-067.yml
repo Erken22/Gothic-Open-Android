@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: opengothic-067-fix16
+  group: opengothic-067-fix16-probe
   cancel-in-progress: true
 
 permissions:
