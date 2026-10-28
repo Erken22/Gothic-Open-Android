@@ -276,6 +276,65 @@ replace_once(
 '''
 )
 
+# Conservative HiZ occlusion for mobile/Adreno.
+# The renderer used a tight transformed bucket AABB for every object and an
+# exact depth comparison. Animated/morphed geometry can extend beyond that
+# static box, while R16 HiZ quantization and tile boundaries can make exact
+# comparisons falsely reject visible meshlets. Keep HiZ enabled, but make the
+# test conservative instead of deleting geometry.
+replace_once(
+    "shader/materials/visibility_pass.comp",
+'''  ibbox[0] = clamp(ibbox[0], ivec2(0), hiZsize - ivec2(1));
+  ibbox[1] = clamp(ibbox[1], ivec2(0), hiZsize - ivec2(1));
+
+  float bz      = packHiZ(depthMin);
+  float z       = hiZFetch(hiZ, ibbox);
+  if(bz > z)
+    return false;
+''',
+'''  // Expand by one base HiZ texel on every side. This makes the query
+  // conservative at tile boundaries: extra sampled area can only raise the
+  // max-depth value and therefore can never create a false occlusion.
+  ibbox[0] -= ivec2(1);
+  ibbox[1] += ivec2(1);
+  ibbox[0] = clamp(ibbox[0], ivec2(0), hiZsize - ivec2(1));
+  ibbox[1] = clamp(ibbox[1], ivec2(0), hiZsize - ivec2(1));
+
+  float bz      = packHiZ(depthMin);
+  float z       = hiZFetch(hiZ, ibbox);
+  // R16 stores the pyramid at half-float precision. Require a real depth gap,
+  // not a quantization-sized difference, before rejecting a cluster.
+  const float conservativeDepthBias = 0.0025;
+  if(bz > z + conservativeDepthBias)
+    return false;
+'''
+)
+
+replace_once(
+    "shader/materials/visibility_pass.comp",
+'''bool projectCluster(const Cluster cluster, out vec4 aabb, out float depthMin) {
+  if(cluster.instanceId==0xFFFFFFFF)
+    return projectSphere(cluster.sphere, aabb, depthMin);
+  // return projectSphere(cluster.sphere, aabb, depthMin);
+  return projectInstance(cluster, aabb, depthMin);
+  }
+''',
+'''bool projectCluster(const Cluster cluster, out vec4 aabb, out float depthMin) {
+  if(cluster.instanceId==0xFFFFFFFF)
+    return projectSphere(cluster.sphere, aabb, depthMin);
+
+  const uint bId = cluster.bucketId_commandId >> 16;
+  // Skinning and morph animation can move vertices outside the static bucket
+  // AABB. Their world-space cluster sphere is updated for visibility and is a
+  // safer bound for occlusion; this prevents body parts from disappearing.
+  if((bucket[bId].flags & (BK_SKIN | BK_MORPH))!=0)
+    return projectSphere(cluster.sphere, aabb, depthMin);
+
+  return projectInstance(cluster, aabb, depthMin);
+  }
+'''
+)
+
 # The Russian scripts contain a BL target with no function symbol. ZenKit's
 # lenient VM already treats this instruction as skippable. Avoid stopping on
 # the red script-error overlay for exactly that known lenient case.
@@ -338,4 +397,4 @@ dep_end = ct.index(dep_end_marker, dep_start) + len(dep_end_marker)
 ct = ct[:dep_start] + '    )' + ct[dep_end:]
 cmake.write_text(ct, encoding="utf-8")
 
-print("Direct-folder + Adreno 650 HiZ two-pass + full mobile shadows/FPS overlay applied")
+print("Direct-folder + Adreno 650 conservative HiZ + full mobile graphics/FPS overlay applied")
