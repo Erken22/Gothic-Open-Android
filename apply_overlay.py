@@ -256,15 +256,21 @@ replace_once(
 '''
 )
 
-# Do not discard small shadow casters on a low-resolution mobile shadow map.
-# The full shadow draw list is more important than this tiny culling saving.
+# Do not drop scene detail as an Android-only shortcut. HiZ already handles
+# occlusion; the main and shadow views should keep the complete geometry list.
 replace_once(
     "common/graphics/drawcommands.cpp",
-'''    else if(SceneGlobals::isShadowView(viewport)) {
+'''    if(viewport==SceneGlobals::V_Main) {
+      push.minObjectPixels = 2.f;
+      }
+    else if(SceneGlobals::isShadowView(viewport)) {
       push.minObjectPixels = 1.f;
       const auto& shadow = *scene.shadowMap[viewport-SceneGlobals::V_Shadow0];
 ''',
-'''    else if(SceneGlobals::isShadowView(viewport)) {
+'''    if(viewport==SceneGlobals::V_Main) {
+      push.minObjectPixels = 0.f;
+      }
+    else if(SceneGlobals::isShadowView(viewport)) {
       push.minObjectPixels = 0.f;
       const auto& shadow = *scene.shadowMap[viewport-SceneGlobals::V_Shadow0];
 '''
