@@ -200,14 +200,12 @@ replace_once(
 
 replace_once(
     "lib/Tempest/Engine/system/api/androidapi.cpp",
-'''    case APP_CMD_CONFIG_CHANGED: {
-      //TODO: dedicated event for dpi/safe-rects
-      if(mainWindow!=nullptr && app!=nullptr && app->window!=nullptr) {
-        SizeEvent event(ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
-        SystemApi::dispatchResize(*mainWindow, event);
-        }
+'''    case APP_CMD_CONFIG_CHANGED:
+      // Android often emits CONFIG_CHANGED immediately after INIT_WINDOW on
+      // resume/rotation. Route it through the same generation/size dedupe so
+      // one NativeWindow can never cause a second swapchain reset.
+      updateWindow();
       break;
-      }
 ''',
 '''    case APP_CMD_CONFIG_CHANGED:
       updateWindow();
