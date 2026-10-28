@@ -1,0 +1,97 @@
+name: Build Direct Folder APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VK_SDK: "1.4.357.0"
+
+jobs:
+  android-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout builder
+        uses: actions/checkout@v6
+
+      - name: Clone OpenGothic Android
+        run: |
+          git clone --branch android --recurse-submodules --shallow-submodules --depth 1 \\
+            https://github.com/Solessfir/OpenGothic.git src
+
+      - name: Apply direct-folder overlay
+        run: python3 apply_overlay.py src
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "8.9"
+
+      - name: Install Vulkan SDK
+        shell: bash
+        run: |
+          curl -fL "https://sdk.lunarg.com/sdk/download/${VK_SDK}/linux/vulkansdk-linux-x86_64-${VK_SDK}.tar.xz" -o VulkanSDK.tar.xz
+          mkdir -p VulkanSDK
+          tar -xJf VulkanSDK.tar.xz -C VulkanSDK
+          echo "VULKAN_SDK=$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64" >> "$GITHUB_ENV"
+          echo "VK_LAYER_PATH=$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64/etc/vulkan/explicit_layers.d" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64/lib" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64/lib/VulkanLoader/lib" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64/bin" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64/Bin" >> "$GITHUB_PATH"
+
+      - name: Install Android build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y glslang-tools ninja-build
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \\
+            "platforms;android-35" \\
+            "build-tools;35.0.0" \\
+            "ndk;27.0.12077973" \\
+            "cmake;3.22.1"
+
+      - name: Generate build version
+        run: |
+          printf '#pragma once\\nstatic const char* appBuild = "Direct Folder %s";\\n' "$GITHUB_SHA" > src/game/build.h
+
+      - name: Configure Android ARM64
+        run: |
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" -S src -B src/build/android -G Ninja \\
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.0.12077973/build/cmake/android.toolchain.cmake" \\
+            -DANDROID_ABI=arm64-v8a \\
+            -DANDROID_PLATFORM=android-24 \\
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build APK
+        run: |
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -j 2
+
+      - name: Collect and verify APK
+        run: |
+          APK="$(find src/build/android -path '*/build/outputs/apk/release/*.apk' -type f | head -n 1)"
+          test -n "$APK"
+          cp "$APK" OpenGothic-Gothic2-DirectFolder-arm64.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose OpenGothic-Gothic2-DirectFolder-arm64.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions OpenGothic-Gothic2-DirectFolder-arm64.apk | tee apk-permissions.txt
+          grep -q "android.permission.MANAGE_EXTERNAL_STORAGE" apk-permissions.txt
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: OpenGothic-Gothic2-DirectFolder-arm64
+          path: |
+            OpenGothic-Gothic2-DirectFolder-arm64.apk
+            apk-permissions.txt
+          if-no-files-found: error
