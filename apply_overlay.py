@@ -236,13 +236,21 @@ replace_once(
     }
 
   if(Gothic::settingsGetI(Section,"version")<4) {
-    // Migrate only the old stock mobile defaults; never overwrite values the
-    // player already changed deliberately.
+    // Migrate only the old stock shadow default; preserve a value the player
+    // deliberately selected.
     if(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingShadows])==256)
       Gothic::settingsSetI(Section,SettingNames[Mobile::SettingShadows],1024);
+    Gothic::settingsSetI(Section,"version",4);
+    Gothic::flushSettings();
+    }
+
+  if(Gothic::settingsGetI(Section,"version")<5) {
+    // Earlier test builds could already be marked version 4 while still
+    // carrying the stock 30 FPS cap. Lift that cap once, without changing
+    // resolution, shadows or effects.
     if(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingFps])==30)
       Gothic::settingsSetI(Section,SettingNames[Mobile::SettingFps],60);
-    Gothic::settingsSetI(Section,"version",4);
+    Gothic::settingsSetI(Section,"version",5);
     Gothic::flushSettings();
     }
 
@@ -468,4 +476,43 @@ dep_end = ct.index(dep_end_marker, dep_start) + len(dep_end_marker)
 ct = ct[:dep_start] + '    )' + ct[dep_end:]
 cmake.write_text(ct, encoding="utf-8")
 
-print("Direct-folder + upstream meshlet ranges + selective HiZ graphics overlay applied")
+print("Direct-folder + upstream meshlets + selective HiZ + FPS/resume instrumentation applied")
+
+# Resume-safe swapchain teardown: presentation may outlive frame fences.
+replace_once(
+    "common/mainwindow.cpp",
+    '''void MainWindow::resizeEvent(SizeEvent&) {
+  for(auto& i:fence)
+    i.wait();
+  swapchain.reset();
+''',
+    '''void MainWindow::resizeEvent(SizeEvent&) {
+#if defined(__ANDROID__)
+  // A NativeActivity resume replaces ANativeWindow/VkSurfaceKHR. Waiting only
+  // frame fences is not sufficient to guarantee presentation has released the
+  // old BufferQueue. Drain the device before destroying that surface.
+  device.waitIdle();
+#endif
+  for(auto& i:fence)
+    i.wait();
+  swapchain.reset();
+'''
+)
+
+replace_once(
+    "common/mainwindow.cpp",
+'''    fps.push(t-time);
+    if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
+''',
+'''    fps.push(t-time);
+#if defined(__ANDROID__)
+    static uint64_t perfLogAt = 0;
+    if(t-perfLogAt>=5000) {
+      perfLogAt = t;
+      Log::i("Runtime FPS: ",fps.get(),", target=",
+             AndroidInput::preferences().fps,", frameLimitMs=",maxFpsInv);
+      }
+#endif
+    if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
+'''
+)
