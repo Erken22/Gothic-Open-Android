@@ -276,4 +276,98 @@ new_detect = '''#elif defined(__ANDROID__)
 '''
 replace_once("common/utils/installdetect.cpp", old_detect, new_detect)
 
-print("FIX16 0.6.7: Direct Folder applied; upstream Adreno/lifecycle/rendering kept intact")
+
+# ---------------------------------------------------------------------------
+# FIX17: Adreno 650 driver-safe visibility fallback on top of upstream 0.6.7.
+#
+# Keep upstream 0.6.7 Adreno fixes (bindless disabled, flattened varyings),
+# frame pacing and lifecycle. Only bypass HiZ rejection on Adreno 650:
+# cluster initialization and GPU-driven indirect draws remain active, but the
+# main visibility pass uses frustum-only culling so false HiZ rejection cannot
+# make the hero, NPCs, walls or objects disappear in pieces.
+# ---------------------------------------------------------------------------
+replace_once(
+    "common/graphics/drawcommands.cpp",
+    '#include <Tempest/Log>\n',
+    '#include <Tempest/Log>\n#include <string_view>\n'
+)
+
+old_visibility = '''void DrawCommands::visibilityPass(Encoder<CommandBuffer>& cmd, int pass) {
+  static bool freeze = false;
+  if(freeze)
+    return;
+
+  cmd.setFramebuffer({});
+  if(pass==0) {
+    for(auto& v:views) {
+      if(this->cmd.empty())
+        continue;
+      if(!isViewEnabled(v.viewport))
+        continue;
+      const uint32_t isMeshShader = (Shaders::options().doMeshShading ? 1 : 0);
+      cmd.setBinding(T_Indirect, v.indirectCmd);
+      cmd.setPushData(&isMeshShader, sizeof(isMeshShader));
+      cmd.setPipeline(Shaders::inst().clusterInit);
+      cmd.dispatchThreads(this->cmd.size());
+      }
+    }
+
+  for(uint8_t v=0; v<SceneGlobals::V_Count; ++v) {
+'''
+new_visibility = '''void DrawCommands::visibilityPass(Encoder<CommandBuffer>& cmd, int pass) {
+  static bool freeze = false;
+  if(freeze)
+    return;
+
+  static const bool adreno650VisibilityFallback = []() {
+#if defined(__ANDROID__)
+    const std::string_view name = Resources::device().properties().name;
+    const bool match = name.find("Adreno")!=std::string_view::npos &&
+                       name.find("650")!=std::string_view::npos;
+    if(match)
+      Log::i("Visibility: Adreno 650 frustum-only fallback enabled; HiZ rejection bypassed");
+    return match;
+#else
+    return false;
+#endif
+    }();
+
+  cmd.setFramebuffer({});
+  if(pass==0) {
+    for(auto& v:views) {
+      if(this->cmd.empty())
+        continue;
+      if(!isViewEnabled(v.viewport))
+        continue;
+      const uint32_t isMeshShader = (Shaders::options().doMeshShading ? 1 : 0);
+      cmd.setBinding(T_Indirect, v.indirectCmd);
+      cmd.setPushData(&isMeshShader, sizeof(isMeshShader));
+      cmd.setPipeline(Shaders::inst().clusterInit);
+      cmd.dispatchThreads(this->cmd.size());
+      }
+    if(adreno650VisibilityFallback)
+      return;
+    }
+
+  for(uint8_t v=0; v<SceneGlobals::V_Count; ++v) {
+'''
+replace_once("common/graphics/drawcommands.cpp", old_visibility, new_visibility)
+
+old_pso = '''    auto* pso = &Shaders::inst().visibilityPassSh;
+    if(viewport==SceneGlobals::V_Main)
+      pso = &Shaders::inst().visibilityPassHiZ;
+    else if(viewport==SceneGlobals::V_HiZ)
+      pso = &Shaders::inst().visibilityPassHiZCr;
+'''
+new_pso = '''    auto* pso = &Shaders::inst().visibilityPassSh;
+    if(!adreno650VisibilityFallback) {
+      if(viewport==SceneGlobals::V_Main)
+        pso = &Shaders::inst().visibilityPassHiZ;
+      else if(viewport==SceneGlobals::V_HiZ)
+        pso = &Shaders::inst().visibilityPassHiZCr;
+      }
+'''
+replace_once("common/graphics/drawcommands.cpp", old_pso, new_pso)
+
+print("FIX17 0.6.7: Adreno 650 frustum-only visibility fallback applied")
+
