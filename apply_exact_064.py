@@ -664,6 +664,13 @@ print("FIX14: Adreno 650 frustum-only visibility fallback; HiZ no longer rejects
 # ---------------------------------------------------------------------------
 # FIX15: bundled Mesa Turnip + libadrenotools Vulkan proxy, selectable in launcher
 # ---------------------------------------------------------------------------
+# AdrenoTools needs hook libraries as ordinary files, not APK-internal ELF entries.
+replace_once(
+    "android/launcher/AndroidManifest.xml",
+    '''        android:fullBackupContent="false"\n''',
+    '''        android:fullBackupContent="false"\n        android:extractNativeLibs="true"\n'''
+)
+
 TURNIP_URL = "https://github.com/The412Banner/Banners-Turnip/releases/download/v27.0.0-20261028-r2/Turnip-v27.0.0-20261028-r2.zip"
 TURNIP_SHA = "d0c77310df2c8ea03502c1f9eec5af19d2dd19d4df7b6088e4d7c340ceb95a2c"
 asset_dir = root / "android/launcher/assets/drivers"
