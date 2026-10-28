@@ -371,3 +371,5 @@ replace_once("common/graphics/drawcommands.cpp", old_pso, new_pso)
 
 print("FIX17 0.6.7: Adreno 650 frustum-only visibility fallback applied")
 
+
+# release mirror trigger
