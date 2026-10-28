@@ -329,6 +329,57 @@ replace_once(
 '''
 )
 
+# Android-fork-only meshlet LOD is not present in upstream OpenGothic and
+# can select incomplete meshlet ranges for Gothic II assets (e.g. missing head
+# or chunks of props/walls). Restore upstream behavior: always submit the
+# cluster's original full meshlet range. HiZ/frustum/distance culling remains.
+replace_once(
+    "shader/materials/visibility_pass.comp",
+'''  uint meshletId  = cluster.firstMeshlet;
+  uint meshletCount = uint(cluster.meshletCount);
+  // Use camera distance in every pass, including HiZ and shadows, to keep
+  // depth and color geometry identical. Close objects retain full detail.
+  if(instanceId!=0xFFFFFFFF && (cluster.lod.x!=0 || cluster.lod.z!=0)) {
+    const vec3 offset = cluster.sphere.xyz-scene.camPos;
+    const float detail = mix(1.0, 0.15, push.modelDetail);
+    const float radius = max(cluster.sphere.w,1.0);
+    const float distanceSquared = dot(offset,offset)*detail*detail;
+    if(distanceSquared>144.0*radius*radius && cluster.lod.z>0) {
+      meshletId = cluster.lod.z;
+      meshletCount = cluster.lod.w;
+      } else if(distanceSquared>25.0*radius*radius && cluster.lod.x>0) {
+      meshletId = cluster.lod.x;
+      meshletCount = cluster.lod.y;
+      }
+    }
+''',
+'''  const uint meshletId  = cluster.firstMeshlet;
+  const uint meshletCount = uint(cluster.meshletCount);
+'''
+)
+
+# HiZ remains enabled for the static world, where it saves the most work.
+# Dynamic/instanced objects are cheap relative to the world and are vulnerable
+# to stale authored bounds, so use frustum+distance only for them. Also keep
+# large near-camera static clusters out of HiZ to prevent wall/door popping.
+replace_once(
+    "shader/materials/visibility_pass.comp",
+'''#if defined(HIZ)
+  if(!hiZTest(aabb, depthMin))
+    return;
+#endif
+''',
+'''#if defined(HIZ)
+  bool useHiZ = (cluster.instanceId==0xFFFFFFFF);
+  const vec2 projectedSpan = max(aabb.zw-aabb.xy,vec2(0));
+  if(max(projectedSpan.x,projectedSpan.y)>0.10)
+    useHiZ = false;
+  if(useHiZ && !hiZTest(aabb, depthMin))
+    return;
+#endif
+'''
+)
+
 # The Russian scripts contain a BL target with no function symbol. ZenKit's
 # lenient VM already treats this instruction as skippable. Avoid stopping on
 # the red script-error overlay for exactly that known lenient case.
@@ -417,4 +468,4 @@ dep_end = ct.index(dep_end_marker, dep_start) + len(dep_end_marker)
 ct = ct[:dep_start] + '    )' + ct[dep_end:]
 cmake.write_text(ct, encoding="utf-8")
 
-print("Direct-folder + conservative HiZ graphics overlay applied")
+print("Direct-folder + upstream meshlet ranges + selective HiZ graphics overlay applied")
