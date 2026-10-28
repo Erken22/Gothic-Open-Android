@@ -66,7 +66,7 @@ jobs:
         run: |
           {
             echo '#pragma once'
-            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix2 $GITHUB_SHA\";"
+            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix3 $GITHUB_SHA\";"
           } > src/game/build.h
 
       - name: Configure Android ARM64
@@ -104,7 +104,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
 
           test -n "$APK"
-          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix2-arm64.apk"
+          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix3-arm64.apk"
           cp "$APK" "$OUT"
 
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUT"
@@ -119,9 +119,9 @@ jobs:
         run: |
           gh release delete direct-folder-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           gh release create direct-folder-latest \
-            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix2-arm64.apk \
+            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix3-arm64.apk \
             apk-permissions.txt apk-badging.txt apk-sha256.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --title "OpenGothic Gothic II NotR - Adreno 650 Graphics Fix 2" \
-            --notes "ARM64 RelWithDebInfo build. Full rendering stays enabled. Adreno 650 uses a two-dispatch HiZ reducer with no cross-workgroup atomic; mobile defaults migrate from 256 to 1024 shadow maps and from 30 to 60 FPS, and shadow-view pixel-size culling is disabled so small casters are preserved." \
+            --title "OpenGothic Gothic II NotR - Adreno 650 Graphics Fix 3" \
+            --notes "ARM64 RelWithDebInfo build. Full rendering stays enabled. Adds conservative HiZ occlusion on Adreno/mobile: animated and morph geometry uses cluster-sphere bounds, HiZ queries expand by one tile and require a depth margin before culling. Two-dispatch HiZ, full main/shadow geometry, 60 FPS defaults remain enabled." \
             --prerelease
