@@ -340,6 +340,36 @@ replace_once(
 
 replace_once(
     "lib/Tempest/Engine/gapi/vulkan/vswapchain.cpp",
+'''  std::initializer_list<VkPresentModeKHR> modes={
+    VK_PRESENT_MODE_FIFO_KHR,         // vsync; optimal
+    VK_PRESENT_MODE_MAILBOX_KHR,      // vsync; wait until vsync
+    VK_PRESENT_MODE_FIFO_RELAXED_KHR, // vsync; optimal, but tearing
+    VK_PRESENT_MODE_IMMEDIATE_KHR,    // no vsync
+    };
+''',
+'''#if defined(__ANDROID__)
+  // MAILBOX keeps VSync but does not force the renderer into FIFO's coarse
+  // 60->30 pacing step when a frame narrowly misses a refresh. Fall back to
+  // required Android FIFO if the driver does not expose MAILBOX.
+  std::initializer_list<VkPresentModeKHR> modes={
+    VK_PRESENT_MODE_MAILBOX_KHR,
+    VK_PRESENT_MODE_FIFO_KHR,
+    VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+    VK_PRESENT_MODE_IMMEDIATE_KHR,
+    };
+#else
+  std::initializer_list<VkPresentModeKHR> modes={
+    VK_PRESENT_MODE_FIFO_KHR,
+    VK_PRESENT_MODE_MAILBOX_KHR,
+    VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+    VK_PRESENT_MODE_IMMEDIATE_KHR,
+    };
+#endif
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/gapi/vulkan/vswapchain.cpp",
 '''void VSwapchain::reset() {
   cleanupSwapchain();
   createSwapchain(device);
