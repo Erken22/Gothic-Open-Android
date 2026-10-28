@@ -1,0 +1,27 @@
+name: Export APK patch tools
+on:
+  push:
+    paths:
+      - '.github/workflows/export-apk-tools.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download apktool
+        run: |
+          curl -fL https://github.com/iBotPeaches/Apktool/releases/download/v2.12.1/apktool_2.12.1.jar -o apktool.jar
+          sha256sum apktool.jar
+      - name: Setup Android SDK build tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0"
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" apksigner.jar
+      - name: Upload tools
+        uses: actions/upload-artifact@v6
+        with:
+          name: apk-patch-tools
+          path: |
+            apktool.jar
+            apksigner.jar
