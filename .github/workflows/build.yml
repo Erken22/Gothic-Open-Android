@@ -1,4 +1,5 @@
 name: Build Exact Gothic Launcher 0.6.4 FIX15
+# CI probe: validate bundled Turnip path end-to-end
 
 on:
   push:
