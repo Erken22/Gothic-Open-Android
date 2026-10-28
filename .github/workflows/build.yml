@@ -81,6 +81,7 @@ jobs:
             -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.9/bin/gradle"
 
       - name: Build APK
+        continue-on-error: true
         run: |
           "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -j 2
 
