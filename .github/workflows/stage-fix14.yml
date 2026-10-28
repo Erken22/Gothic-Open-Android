@@ -1,0 +1,37 @@
+name: Stage FIX14 APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/stage-fix14.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download private release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download exact-064-fix13 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "GothicLauncher-arm64-Exact064-FIX13-IME-CULL-PERF.apk"
+          mv GothicLauncher-arm64-Exact064-FIX13-IME-CULL-PERF.apk \
+             /tmp/GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk
+      - name: Push delivery branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --orphan fix14-delivery
+          git rm -rf .
+          cp /tmp/GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk .
+          printf "FIX14 delivery branch\n" > README.txt
+          git add .
+          git commit -m "Stage FIX14 APK [skip ci]"
+          git push --force origin fix14-delivery
