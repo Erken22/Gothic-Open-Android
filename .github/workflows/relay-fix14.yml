@@ -1,0 +1,41 @@
+name: Relay FIX14 APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/relay-fix14.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  relay:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download private release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download exact-064-fix13 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "GothicLauncher-arm64-Exact064-FIX13-IME-CULL-PERF.apk"
+          mv GothicLauncher-arm64-Exact064-FIX13-IME-CULL-PERF.apk \
+             GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk
+          sha256sum GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk
+      - name: Relay APK
+        shell: bash
+        run: |
+          FILE="GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk"
+          URL="$(curl --fail --silent --show-error \
+            -F 'reqtype=fileupload' \
+            -F "fileToUpload=@$FILE" \
+            https://catbox.moe/user/api.php || true)"
+          if [[ "$URL" != https://* ]]; then
+            URL="$(curl --fail --silent --show-error \
+              -F "file=@$FILE" \
+              https://0x0.st || true)"
+          fi
+          test "$URL" != ""
+          echo "FIX14_RELAY_URL=$URL"
