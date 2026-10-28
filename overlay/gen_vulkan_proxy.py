@@ -136,6 +136,9 @@ for cmd in root.findall('./commands/command'):
     params=[]
     args=[]
     for p in cmd.findall('param'):
+        api=p.get('api')
+        if api and 'vulkan' not in api.split(','):
+            continue
         params.append(norm(text_of(p)))
         ne=p.find('name')
         args.append(ne.text)
@@ -149,6 +152,7 @@ head=r'''// Generated at build time from Khronos vk.xml.
 // OpenGothic FIX15 app-local Vulkan proxy.
 // Tries Mesa Turnip via libadrenotools, falls back to Android system Vulkan.
 
+#define VK_USE_PLATFORM_ANDROID_KHR 1
 #include <vulkan/vulkan.h>
 #include <android/log.h>
 #include <dlfcn.h>
