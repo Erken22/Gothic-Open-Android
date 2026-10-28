@@ -139,6 +139,21 @@ replace_once(
 '''
 )
 
+replace_once(
+    "common/graphics/drawcommands.cpp",
+'''    if(viewport==SceneGlobals::V_Main) {
+      push.minObjectPixels = 2.f;
+      }
+''',
+'''    if(viewport==SceneGlobals::V_Main) {
+      // visibility_pass.comp (the non-HiZ fallback) has no MAIN_VIEW projection
+      // code and therefore cannot evaluate pixel-size culling for V_Main.
+      // Leaving this at 2 with viewportSize==0 rejects nearly all geometry.
+      push.minObjectPixels = SafeGpu::isMinimal() ? 0.f : 2.f;
+      }
+'''
+)
+
 # The Russian script set contains a BL instruction whose target address has no
 # function symbol. ZenKit's lenient handler already ignores that branch and
 # continues, but it logs it as an error first, which OpenGothic turns into the
