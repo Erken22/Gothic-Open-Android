@@ -125,8 +125,9 @@ void AndroidApi::updateFocus() {
       }
     }
 
-  if(active)
-    applyPendingWindowReset();
+  // Do not reset here. INIT_WINDOW/CONFIG_CHANGED/RESIZE can arrive in a
+  // burst during resume; implProcessEvents() applies one reset only after the
+  // Android looper queue is drained and the final landscape surface is known.
   }
 '''
 )
@@ -357,4 +358,35 @@ replace_once(
 '''
 )
 
-print("Post-config Tempest deferred Android suspend/resume patch applied")
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''  if(!visible || isExit.load())
+    return;
+
+  if(cb.onTimer()==0)
+    std::this_thread::yield();
+
+  if(mainWindow!=nullptr)
+    dispatchRender(*mainWindow);
+''',
+'''  if(!visible || isExit.load())
+    return;
+
+  // All currently queued NativeActivity commands have been consumed when
+  // pollOnce() reaches here. Rebuild now, after INIT_WINDOW + rotation/config
+  // + resize have settled, so the swapchain targets the final landscape
+  // surface instead of an intermediate one.
+  if(windowResetPending) {
+    applyPendingWindowReset();
+    return;
+    }
+
+  if(cb.onTimer()==0)
+    std::this_thread::yield();
+
+  if(mainWindow!=nullptr)
+    dispatchRender(*mainWindow);
+'''
+)
+
+print("Post-config Tempest settled Android suspend/resume patch applied")
