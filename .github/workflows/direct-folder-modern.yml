@@ -1,5 +1,5 @@
-name: Build Modern Direct Folder GraphicsFix7
-# workflow revision: graphicsfix7-mailbox-triple-buffer-resume
+name: Build Modern Direct Folder GraphicsFix8
+# workflow revision: graphicsfix8-stable-props-cpu-profiler
 
 on:
   push:
@@ -71,7 +71,7 @@ jobs:
         run: |
           {
             echo '#pragma once'
-            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix7 $GITHUB_SHA\";"
+            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix8 $GITHUB_SHA\";"
           } > src/game/build.h
 
       - name: Configure Android ARM64
@@ -112,7 +112,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
 
           test -n "$APK"
-          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix7-arm64.apk"
+          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix8-arm64.apk"
           cp "$APK" "$OUT"
 
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUT"
@@ -127,9 +127,9 @@ jobs:
         run: |
           gh release delete direct-folder-modern-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           gh release create direct-folder-modern-latest \
-            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix7-arm64.apk \
+            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix8-arm64.apk \
             apk-permissions.txt apk-badging.txt apk-sha256.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --title "OpenGothic Modern Direct Folder - GraphicsFix7" \
-            --notes "Modern Android fork / ARM64 Release. Keeps the stable geometry fixes, restores safe static HiZ/subpixel culling, migrates stale 30 FPS profiles to 60, logs real runtime FPS, uses 3 application frames in flight, and prefers Vulkan MAILBOX on Android when supported. Resume defers exactly one surface/swapchain rebuild until the new NativeWindow is active and drains GPU/presentation work before replacing the old surface." \
+            --title "OpenGothic Modern Direct Folder - GraphicsFix8" \
+            --notes "Modern Android fork / ARM64 Release. Removes the remaining screen-size culling that made tiny props flicker at 50% internal resolution. HiZ remains enabled for baked world geometry, while instanced VOBs use stable frustum/distance visibility. Keeps triple buffering/MAILBOX/resume fixes and adds detailed per-stage CPU frame profiling (tick/UI/encode/submit/present) because device logs show low FPS with gpuFenceBusy=0." \
             --prerelease
