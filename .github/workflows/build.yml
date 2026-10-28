@@ -134,6 +134,7 @@ jobs:
           sha256sum libopengothic-FIX15-unstripped.so | tee symbols-sha256.txt
 
       - name: Upload FIX15 test artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: GothicLauncher-Exact064-FIX15-TURNIP-AUTO-arm64
@@ -149,6 +150,27 @@ jobs:
             apk-signature.txt
             symbols-info.txt
             symbols-sha256.txt
+
+      - name: Relay FIX15 APK for direct testing
+        shell: bash
+        run: |
+          FILE="GothicLauncher-arm64-Exact064-FIX15-TURNIP-AUTO.apk"
+          RESP="$(curl --connect-timeout 20 --max-time 300 --fail --silent --show-error \\
+            -F "file=@$FILE" https://upload.gofile.io/uploadfile)"
+          echo "$RESP" | jq .
+          test "$(printf '%s' "$RESP" | jq -r '.status // empty')" = "ok"
+          PAGE="$(printf '%s' "$RESP" | jq -r '.data.downloadPage // .data.downloadPageUrl // empty')"
+          FILEID="$(printf '%s' "$RESP" | jq -r '.data.fileId // .data.id // empty')"
+          FOLDER="$(printf '%s' "$RESP" | jq -r '.data.parentFolder // .data.folderId // empty')"
+          TOKEN="$(printf '%s' "$RESP" | jq -r '.data.guestToken // empty')"
+          echo "FIX15_GOFILE_PAGE=$PAGE"
+          if [ -n "$TOKEN" ] && [ -n "$FOLDER" ] && [ -n "$FILEID" ]; then
+            META="$(curl --connect-timeout 20 --max-time 60 --fail --silent --show-error \\
+              -H "Authorization: Bearer $TOKEN" \\
+              "https://api.gofile.io/contents/$FOLDER")"
+            LINK="$(printf '%s' "$META" | jq -r --arg id "$FILEID" '.data.children[$id].link // .data.children[$id].directLink // empty')"
+            echo "FIX15_GOFILE_DIRECT_LINK=$LINK"
+          fi
 
       - name: Publish FIX15 release
         if: github.event_name != 'pull_request'
