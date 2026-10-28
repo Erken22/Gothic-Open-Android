@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: opengothic-067-fix19-cxxshared
+  group: opengothic-067-fix19-release
   cancel-in-progress: true
 
 permissions:
@@ -135,6 +135,7 @@ jobs:
           echo "FIX19 Turnip packaging/linkage verification: PASS"
 
       - name: Upload verified FIX19 artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: OpenGothic-FIX19-verified
