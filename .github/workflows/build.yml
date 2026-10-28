@@ -9,6 +9,14 @@ on:
       - ci/prepare_turnip.sh
       - ci/verify_turnip_apk.sh
       - .github/workflows/build.yml
+  pull_request:
+    branches: [fix15-turnip]
+    paths:
+      - apply_exact_064.py
+      - overlay/gen_vulkan_proxy.py
+      - ci/prepare_turnip.sh
+      - ci/verify_turnip_apk.sh
+      - .github/workflows/build.yml
   workflow_dispatch:
 
 concurrency:
@@ -124,7 +132,25 @@ jobs:
           file libopengothic-FIX15-unstripped.so | tee symbols-info.txt
           sha256sum libopengothic-FIX15-unstripped.so | tee symbols-sha256.txt
 
+      - name: Upload FIX15 test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GothicLauncher-Exact064-FIX15-TURNIP-AUTO-arm64
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            GothicLauncher-arm64-Exact064-FIX15-TURNIP-AUTO.apk
+            apk-badging.txt
+            apk-permissions.txt
+            apk-sha256.txt
+            apk-files.txt
+            needed.txt
+            apk-signature.txt
+            symbols-info.txt
+            symbols-sha256.txt
+
       - name: Publish FIX15 release
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
