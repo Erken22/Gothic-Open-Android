@@ -519,27 +519,6 @@ replace_once(
 '''
 )
 
-# Periodic real frame-rate telemetry. This logs the post-present, post-sleep
-# frame rate seen by OpenGothic itself; it lets the next log distinguish
-# engine/GPU limits from an artificial cap without enabling a benchmark mode.
-replace_once(
-    "common/mainwindow.cpp",
-'''    fps.push(t-time);
-    if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
-''',
-'''    fps.push(t-time);
-#if defined(__ANDROID__)
-    static uint64_t perfLogAt = 0;
-    if(t-perfLogAt>=2000) {
-      perfLogAt = t;
-      Log::i("Perf: fps=",fps.get(),", frame_ms=",fps.get()>0.0 ? 1000.0/fps.get() : 0.0,
-             ", cap=",maxFpsInv>0 ? 1000.0/double(maxFpsInv) : 0.0);
-      }
-#endif
-    if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
-'''
-)
-
 # The Russian scripts contain a BL target with no function symbol. ZenKit's
 # lenient VM already treats this instruction as skippable. Avoid stopping on
 # the red script-error overlay for exactly that known lenient case.
