@@ -263,6 +263,15 @@ replace_once(
     Gothic::flushSettings();
     }
 
+  if(Gothic::settingsGetI(Section,"version")<5) {
+    // GraphicsFix6: some previous test builds already stored version 4 while
+    // still carrying the old 30 FPS cap. Lift only that legacy value.
+    if(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingFps])==30)
+      Gothic::settingsSetI(Section,SettingNames[Mobile::SettingFps],60);
+    Gothic::settingsSetI(Section,"version",5);
+    Gothic::flushSettings();
+    }
+
   {
     const auto p = preferences();
     Log::i("Mobile profile: resolution=",p.resolution,"%, shadows=",p.shadows,
@@ -358,7 +367,15 @@ replace_once(
 '''#if defined(MAIN_VIEW)
   vec4  aabb     = vec4(0);
   float depthMin = 1;
-  if(!projectCluster(cluster, aabb, depthMin))
+  bool needProjectedBounds = true;
+#if defined(HIZ)
+  // Dynamic/instanced objects are intentionally excluded from HiZ below.
+  // With pixel-size culling disabled they do not need the expensive screen
+  // projection at all.
+  if(cluster.instanceId!=0xFFFFFFFF && push.minObjectPixels<=0)
+    needProjectedBounds = false;
+#endif
+  if(needProjectedBounds && !projectCluster(cluster, aabb, depthMin))
     return;
 #endif
 ''',
@@ -473,6 +490,50 @@ replace_once(
 ''',
     '''      MaxFramesInFlight = 3,
       ShadowLayers      = 2,
+'''
+)
+
+# Android resume: before destroying a swapchain tied to a dead NativeWindow,
+# wait the entire Vulkan device, including presentation, not just graphics
+# frame fences. This prevents BufferQueue maxImages leaks across resume.
+replace_once(
+    "common/mainwindow.cpp",
+'''void MainWindow::resizeEvent(SizeEvent&) {
+  for(auto& i:fence)
+    i.wait();
+  swapchain.reset();
+''',
+'''void MainWindow::resizeEvent(SizeEvent&) {
+#if defined(__ANDROID__)
+  Log::i("Android swapchain reset begin");
+  device.waitIdle();
+#else
+  for(auto& i:fence)
+    i.wait();
+#endif
+  swapchain.reset();
+#if defined(__ANDROID__)
+  Log::i("Android swapchain reset complete: ",swapchain.w(),"x",swapchain.h());
+#endif
+'''
+)
+
+# Periodic real in-engine FPS telemetry. Android's SurfaceFlinger "fps(60)"
+# messages report display refresh, not game rendering performance.
+replace_once(
+    "common/mainwindow.cpp",
+'''    fps.push(t-time);
+    if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
+''',
+'''    fps.push(t-time);
+#if defined(__ANDROID__)
+    static uint64_t nextPerfLog = 0;
+    if(t>=nextPerfLog) {
+      nextPerfLog = t + 5000;
+      Log::i("OpenGothic real FPS: ",fps.get());
+      }
+#endif
+    if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
 '''
 )
 
