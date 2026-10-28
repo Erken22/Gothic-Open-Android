@@ -499,6 +499,68 @@ replace_once(
 '''
 )
 
+# Android resume: wait for all queued GPU/present work before destroying the
+# old swapchain/surface. Fences cover submitted command buffers, but the
+# presentation engine can still own swapchain images after TERM_WINDOW.
+replace_once(
+    "common/mainwindow.cpp",
+'''void MainWindow::resizeEvent(SizeEvent&) {
+  for(auto& i:fence)
+    i.wait();
+  swapchain.reset();
+''',
+'''void MainWindow::resizeEvent(SizeEvent&) {
+#ifdef __ANDROID__
+  Log::i("Android swapchain rebuild: waitIdle before reset");
+  device.waitIdle();
+#endif
+  for(auto& i:fence)
+    i.wait();
+  swapchain.reset();
+'''
+)
+
+# The user's GraphicsFix5 log still contains a saved 30 FPS mobile preference.
+# Do not reduce any graphics setting; only remove that legacy frame cap on
+# Adreno 650 so the renderer can run as fast as it actually can.
+replace_once(
+    "common/mainwindow.cpp",
+'''#ifdef OPENGOTHIC_TOUCH_UI
+  zMaxFps = std::clamp(AndroidInput::preferences().fps,30,60);
+#endif
+''',
+'''#ifdef OPENGOTHIC_TOUCH_UI
+  zMaxFps = std::clamp(AndroidInput::preferences().fps,30,60);
+#if defined(__ANDROID__)
+  if(Resources::device().properties().name!=nullptr &&
+     std::strstr(Resources::device().properties().name,"Adreno (TM) 650")!=nullptr)
+    zMaxFps = 60;
+#endif
+#endif
+'''
+)
+
+# Periodic real frame-rate telemetry. This logs the post-present, post-sleep
+# frame rate seen by OpenGothic itself; it lets the next log distinguish
+# engine/GPU limits from an artificial cap without enabling a benchmark mode.
+replace_once(
+    "common/mainwindow.cpp",
+'''    fps.push(t-time);
+    if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
+''',
+'''    fps.push(t-time);
+#if defined(__ANDROID__)
+    static uint64_t perfLogAt = 0;
+    if(t-perfLogAt>=2000) {
+      perfLogAt = t;
+      Log::i("Perf: fps=",fps.get(),", frame_ms=",fps.get()>0.0 ? 1000.0/fps.get() : 0.0,
+             ", cap=",maxFpsInv>0 ? 1000.0/double(maxFpsInv) : 0.0);
+      }
+#endif
+    if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
+'''
+)
+
 # The Russian scripts contain a BL target with no function symbol. ZenKit's
 # lenient VM already treats this instruction as skippable. Avoid stopping on
 # the red script-error overlay for exactly that known lenient case.
