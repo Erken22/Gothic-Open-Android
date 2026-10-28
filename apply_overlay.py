@@ -9,47 +9,74 @@ def replace_once(path, old, new):
     p = root / path
     text = p.read_text(encoding="utf-8")
     if old not in text:
-        raise SystemExit(f"Patch anchor not found in {path}: {old[:100]!r}")
+        raise SystemExit(f"Patch anchor not found in {path}: {old[:140]!r}")
     p.write_text(text.replace(old, new, 1), encoding="utf-8")
 
-# Single-game Gothic II: NotR APK: allow the native engine to read the user's
-# selected folder as a normal filesystem path.
+# Use a tiny launcher that selects an existing Gothic II folder instead of
+# importing/copying game data into the application directory.
 replace_once(
-    "android/app/src/main/AndroidManifest.xml",
+    "android/AndroidManifest.xml",
     '    <uses-permission android:name="android.permission.VIBRATE" />\n',
     '    <uses-permission android:name="android.permission.VIBRATE" />\n'
-    '    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />\n'
+    '    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />\n'
 )
 
-# Replace ZIP-import setup with the tiny direct-folder selector.
-source = Path(__file__).resolve().parent / "overlay" / "SetupActivity.java.in"
-target = root / "android/app/SetupActivity.java.in"
+replace_once(
+    "android/AndroidManifest.xml",
+    'android:name="org.opengothic.app.LauncherActivity"',
+    'android:name="org.opengothic.app.DirectFolderActivity"'
+)
+
+source = Path(__file__).resolve().parent / "overlay" / "DirectFolderActivityModern.java"
+target = root / "android/java/org/opengothic/app/DirectFolderActivity.java"
 shutil.copy2(source, target)
 
-# Native OpenGothic normally checks <app external files>/Gothic2 on Android.
-# Prefer an absolute path written by SetupActivity, then retain the old fallback.
+# The current Android engine normally looks for Gothic2 below its own external
+# files directory. Prefer an absolute path selected by DirectFolderActivity.
 old_detect = '''#elif defined(__ANDROID__)
-  auto name = androidGame();
-  auto game = appDir;
+  auto path = Tempest::AndroidApi::externalDataPath().u16string();
+  if(path.empty())
+    return u"";
 '''
 new_detect = '''#elif defined(__ANDROID__)
+  auto appData = Tempest::AndroidApi::externalDataPath();
+  if(appData.empty())
+    return u"";
+
   {
-    std::ifstream file(std::filesystem::path(applicationSupportDirectory())/"game-path.txt");
-    std::string path;
-    std::getline(file,path);
-    while(!path.empty() && std::isspace(uint8_t(path.back())))
-      path.pop_back();
-    if(!path.empty()) {
-      std::filesystem::path direct(path);
+    std::ifstream in(std::filesystem::path(appData)/"game-path.txt");
+    std::string selectedPath;
+    if(in && std::getline(in,selectedPath)) {
+      while(!selectedPath.empty() && (selectedPath.back()=='\\r' || selectedPath.back()=='\\n'))
+        selectedPath.pop_back();
+      std::filesystem::path direct(selectedPath);
       std::error_code ec;
       if(direct.is_absolute() && std::filesystem::is_directory(direct,ec) && !ec)
         return direct.u16string();
     }
   }
 
-  auto name = androidGame();
-  auto game = appDir;
+  auto path = appData.u16string();
 '''
 replace_once("common/utils/installdetect.cpp", old_detect, new_detect)
 
-print("Direct-folder Gothic II: NotR overlay applied")
+# The supplied logcat is from Adreno 650 and dies inside Qualcomm's
+# vkCreateGraphicsPipelines shader compiler. The modern Android fork already
+# has SafeGpu crash tracking; start this specific driver in its minimal profile
+# immediately so the first test does not have to crash once to learn it.
+old_safe = '''  s.level = level;
+  s.ready = true;
+'''
+new_safe = '''#if defined(__ANDROID__)
+  if(s.identity.find("Adreno (TM) 650")!=std::string::npos) {
+    level = std::max(level,int(Minimal));
+    Log::e("Safe GPU mode: forced minimal profile for Adreno 650");
+    }
+#endif
+
+  s.level = level;
+  s.ready = true;
+'''
+replace_once("common/graphics/safegpu.cpp", old_safe, new_safe)
+
+print("Modern direct-folder + Adreno 650 SafeGpu overlay applied")
