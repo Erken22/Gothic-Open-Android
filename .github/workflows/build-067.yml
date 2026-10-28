@@ -1,0 +1,139 @@
+name: Build OpenGothic 0.6.7 FIX16 DirectFolder
+
+on:
+  push:
+    branches: [fix16-067-base]
+    paths:
+      - apply_067.py
+      - .github/workflows/build-067.yml
+  workflow_dispatch:
+
+concurrency:
+  group: opengothic-067-fix16
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  OPENGOTHIC_COMMIT: "18336539f4b1a8d7b325930f613811f59fbde5db"
+  BUILD_TYPE: "Release"
+
+jobs:
+  android-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout patch repository
+        uses: actions/checkout@v6
+
+      - name: Clone exact OpenGothic 0.6.7 source
+        shell: bash
+        run: |
+          git clone https://github.com/Solessfir/OpenGothic.git src
+          cd src
+          git checkout "$OPENGOTHIC_COMMIT"
+          git submodule update --init --recursive
+          echo "OpenGothic: $(git rev-parse HEAD)"
+          echo "Tempest: $(git -C lib/Tempest rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "$OPENGOTHIC_COMMIT"
+
+      - name: Apply FIX16 Direct Folder
+        run: python3 apply_067.py src
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "8.9"
+
+      - name: Install Vulkan headers and Android build tools
+        shell: bash
+        run: |
+          git clone --depth 1 --branch vulkan-sdk-1.4.357.0 https://github.com/KhronosGroup/Vulkan-Headers.git Vulkan-Headers
+          mkdir -p VulkanSDK/include
+          cp -a Vulkan-Headers/include/. VulkanSDK/include/
+          echo "VULKAN_SDK=$GITHUB_WORKSPACE/VulkanSDK" >> "$GITHUB_ENV"
+
+          sudo apt-get update
+          sudo apt-get install -y glslang-tools ninja-build
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platforms;android-35"             "build-tools;35.0.0"             "ndk;27.0.12077973"             "cmake;3.22.1"
+
+      - name: Generate FIX16 build ID
+        shell: bash
+        run: |
+          {
+            echo '#pragma once'
+            echo 'static const char* appBuild = "OpenGothic 0.6.7 FIX16 DirectFolder";'
+          } > src/game/build.h
+
+      - name: Configure Android ARM64
+        shell: bash
+        run: |
+          GRADLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.9/bin/gradle"
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" -S src -B src/build/android -G Ninja             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.0.12077973/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_PLATFORM=android-24             -DCMAKE_BUILD_TYPE="$BUILD_TYPE"             -DOPENGOTHIC_ANDROID_GAME=launcher             -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$GRADLE"
+
+      - name: Build release APK
+        shell: bash
+        run: |
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -- -j2
+
+      - name: Collect, sign and verify FIX16
+        shell: bash
+        run: |
+          APK=""
+          while IFS= read -r candidate; do
+            if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$candidate" 2>/dev/null | grep -q "package: name='org.opengothic.launcher'"; then
+              APK="$candidate"
+              break
+            fi
+          done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
+          test -n "$APK"
+
+          OUT="GothicLauncher-arm64-OpenGothic067-FIX16-DIRECT.apk"
+          base64 -d .ci/gothic_fix2.keystore.b64 > gothic_fix2.keystore
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" aligned-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks gothic_fix2.keystore             --ks-key-alias gothicfix2             --ks-pass pass:android             --key-pass pass:android             --out "$OUT" aligned-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
+
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$OUT" | tee apk-permissions.txt
+          grep -q "versionName='0.6.7'" apk-badging.txt
+          grep -q "android.permission.MANAGE_EXTERNAL_STORAGE" apk-permissions.txt
+
+          unzip -l "$OUT" | tee apk-files.txt
+          ! grep -q "lib/arm64-v8a/libvulkan.so" apk-files.txt
+          unzip -p "$OUT" lib/arm64-v8a/libopengothic.so > packaged-libopengothic.so
+
+          READELF="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          "$READELF" -Ws packaged-libopengothic.so | tee elf-symbols.txt
+          awk '$8=="__gxx_personality_v0" && $7!="UND" {ok=1} END {exit ok?0:1}' elf-symbols.txt
+
+          strings packaged-libopengothic.so | grep -F "OpenGothic 0.6.7"
+          sha256sum "$OUT" | tee apk-sha256.txt
+          echo "FIX16 runtime/linkage verification: PASS"
+
+      - name: Publish FIX16 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release delete exact-067-fix16 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create exact-067-fix16             GothicLauncher-arm64-OpenGothic067-FIX16-DIRECT.apk             apk-badging.txt apk-permissions.txt apk-sha256.txt apk-signature.txt             --repo "$GITHUB_REPOSITORY"             --title "OpenGothic 0.6.7 FIX16 — clean Adreno baseline + Direct Folder"             --notes "Clean 0.6.7 baseline pinned to 18336539. Keeps upstream Adreno fixes (bindless disabled and flat material varyings on Adreno), upstream lifecycle/rendering changes, and adds only Direct Folder support. No Turnip and no FIX14 frustum-only fallback. CI verifies __gxx_personality_v0 is defined in libopengothic.so so the FIX15 launch crash cannot recur."             --prerelease
+
+      - name: Relay FIX16 APK
+        continue-on-error: true
+        shell: bash
+        run: |
+          FILE="GothicLauncher-arm64-OpenGothic067-FIX16-DIRECT.apk"
+          RESP="$(curl --connect-timeout 20 --max-time 300 --fail --silent --show-error -F "file=@$FILE" https://upload.gofile.io/uploadfile)"
+          echo "$RESP" | jq .
+          test "$(printf '%s' "$RESP" | jq -r '.status // empty')" = "ok"
+          PAGE="$(printf '%s' "$RESP" | jq -r '.data.downloadPage // .data.downloadPageUrl // empty')"
+          echo "FIX16_GOFILE_PAGE=$PAGE"
