@@ -28,14 +28,35 @@ jobs:
         shell: bash
         run: |
           FILE="GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk"
-          URL="$(curl --fail --silent --show-error \
-            -F 'reqtype=fileupload' \
-            -F "fileToUpload=@$FILE" \
-            https://catbox.moe/user/api.php || true)"
+          URL=""
+
+          # transfer.sh
+          URL="$(curl --connect-timeout 20 --max-time 180 --fail --silent --show-error \
+            --upload-file "$FILE" \
+            "https://transfer.sh/$(basename "$FILE")" || true)"
           if [[ "$URL" != https://* ]]; then
-            URL="$(curl --fail --silent --show-error \
-              -F "file=@$FILE" \
-              https://0x0.st || true)"
+            URL=""
           fi
-          test "$URL" != ""
+
+          # pixeldrain
+          if [[ -z "$URL" ]]; then
+            RESP="$(curl --connect-timeout 20 --max-time 180 --fail --silent --show-error \
+              -T "$FILE" https://pixeldrain.com/api/file/ || true)"
+            ID="$(printf '%s' "$RESP" | jq -r '.id // empty' 2>/dev/null || true)"
+            if [[ -n "$ID" ]]; then
+              URL="https://pixeldrain.com/api/file/$ID"
+            fi
+          fi
+
+          # tmpfiles
+          if [[ -z "$URL" ]]; then
+            RESP="$(curl --connect-timeout 20 --max-time 180 --fail --silent --show-error \
+              -F "file=@$FILE" https://tmpfiles.org/api/v1/upload || true)"
+            TMP="$(printf '%s' "$RESP" | jq -r '.data.url // empty' 2>/dev/null || true)"
+            if [[ "$TMP" == https://tmpfiles.org/* ]]; then
+              URL="${TMP/https:\/\/tmpfiles.org\//https:\/\/tmpfiles.org\/dl\/}"
+            fi
+          fi
+
+          test -n "$URL"
           echo "FIX14_RELAY_URL=$URL"
