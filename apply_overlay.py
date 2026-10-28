@@ -79,4 +79,54 @@ new_safe = '''#if defined(__ANDROID__)
 '''
 replace_once("common/graphics/safegpu.cpp", old_safe, new_safe)
 
+
+# This build has no Steam login/download/import/update UI. Keep only the Java
+# classes required by the direct-folder launcher and the native game activity.
+java_dir = root / "android/java/org/opengothic/app"
+keep_java = {
+    "DirectFolderActivity.java",
+    "GameActivity.java",
+    "GameFiles.java",
+    "Haptics.java",
+    "SystemUi.java",
+}
+for java in java_dir.glob("*.java"):
+    if java.name not in keep_java:
+        java.unlink()
+
+# Remove launcher-only Android components from the manifest.
+manifest = root / "android/AndroidManifest.xml"
+mt = manifest.read_text(encoding="utf-8")
+for block in [
+'''        <!-- Mods: adding of zip files and the choice of the mods that start with the game -->
+        <activity android:name="org.opengothic.app.ModsActivity" android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+''',
+'''        <!-- The login to Steam, the first screen when nobody is signed in -->
+        <activity android:name="org.opengothic.app.SteamLoginActivity" android:exported="false"
+            android:screenOrientation="landscape" android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+''',
+'''        <!-- The answer of the system installer to the update -->
+        <receiver android:name="org.opengothic.app.UpdateReceiver" android:exported="false" />
+        <service android:name="org.opengothic.app.SteamDownloadService" android:exported="false"
+            android:foregroundServiceType="dataSync" />
+''',
+]:
+    mt = mt.replace(block, "")
+manifest.write_text(mt, encoding="utf-8")
+
+# Drop Steam/network Gradle dependencies. The direct-folder APK does not use
+# any third-party Java library.
+cmake = root / "CMakeLists.txt"
+ct = cmake.read_text(encoding="utf-8")
+dep_start = ct.find('    # The login to Steam and the download of the games')
+dep_end_marker = '      "com.squareup.okio:okio:3.16.0")'
+if dep_start < 0 or dep_end_marker not in ct:
+    raise SystemExit("Android dependency block not found in CMakeLists.txt")
+dep_end = ct.index(dep_end_marker, dep_start) + len(dep_end_marker)
+ct = ct[:dep_start] + '    )' + ct[dep_end:]
+cmake.write_text(ct, encoding="utf-8")
+
 print("Modern direct-folder + Adreno 650 SafeGpu overlay applied")
