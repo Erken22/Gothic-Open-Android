@@ -1,13 +1,13 @@
-name: Build OpenGothic 0.6.7 FIX16 DirectFolder
+name: Build OpenGothic 0.6.7 FIX17 DirectFolder
 
 on:
   push:
-    branches: [fix16-067-base]
+    branches: [fix17-067-frustum]
     paths:
       - apply_067.py
       - .github/workflows/build-067.yml
   pull_request:
-    branches: [fix16-067-base]
+    branches: [fix17-067-frustum]
     paths:
       - apply_067.py
       - .github/workflows/build-067.yml
@@ -44,7 +44,7 @@ jobs:
           echo "Tempest: $(git -C lib/Tempest rev-parse HEAD)"
           test "$(git rev-parse HEAD)" = "$OPENGOTHIC_COMMIT"
 
-      - name: Apply FIX16 Direct Folder
+      - name: Apply FIX17 Direct Folder
         run: python3 apply_067.py src
 
       - name: Set up JDK 17
@@ -70,12 +70,12 @@ jobs:
           sudo apt-get install -y glslang-tools ninja-build
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platforms;android-35"             "build-tools;35.0.0"             "ndk;27.0.12077973"             "cmake;3.22.1"
 
-      - name: Generate FIX16 build ID
+      - name: Generate FIX17 build ID
         shell: bash
         run: |
           {
             echo '#pragma once'
-            echo 'static const char* appBuild = "OpenGothic 0.6.7 FIX16 DirectFolder";'
+            echo 'static const char* appBuild = "OpenGothic 0.6.7 FIX17 DirectFolder";'
           } > src/game/build.h
 
       - name: Configure Android ARM64
@@ -89,7 +89,7 @@ jobs:
         run: |
           "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -- -j2
 
-      - name: Collect, sign and verify FIX16
+      - name: Collect, sign and verify FIX17
         shell: bash
         run: |
           APK=""
@@ -101,7 +101,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
           test -n "$APK"
 
-          OUT="GothicLauncher-arm64-OpenGothic067-FIX16-DIRECT.apk"
+          OUT="GothicLauncher-arm64-OpenGothic067-FIX17-DIRECT.apk"
           base64 -d .ci/gothic_fix2.keystore.b64 > gothic_fix2.keystore
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" aligned-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks gothic_fix2.keystore             --ks-key-alias gothicfix2             --ks-pass pass:android             --key-pass pass:android             --out "$OUT" aligned-unsigned.apk
@@ -122,24 +122,24 @@ jobs:
 
           strings packaged-libopengothic.so | grep -F "OpenGothic 0.6.7"
           sha256sum "$OUT" | tee apk-sha256.txt
-          echo "FIX16 runtime/linkage verification: PASS"
+          echo "FIX17 runtime/linkage verification: PASS"
 
-      - name: Publish FIX16 release
+      - name: Publish FIX17 release
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release delete exact-067-fix16 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          gh release create exact-067-fix16             GothicLauncher-arm64-OpenGothic067-FIX16-DIRECT.apk             apk-badging.txt apk-permissions.txt apk-sha256.txt apk-signature.txt             --repo "$GITHUB_REPOSITORY"             --title "OpenGothic 0.6.7 FIX16 — clean Adreno baseline + Direct Folder"             --notes "Clean 0.6.7 baseline pinned to 18336539. Keeps upstream Adreno fixes (bindless disabled and flat material varyings on Adreno), upstream lifecycle/rendering changes, and adds only Direct Folder support. No Turnip and no FIX14 frustum-only fallback. CI verifies __gxx_personality_v0 is defined in libopengothic.so so the FIX15 launch crash cannot recur."             --prerelease
+          gh release delete exact-067-fix17 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create exact-067-fix17             GothicLauncher-arm64-OpenGothic067-FIX17-DIRECT.apk             apk-badging.txt apk-permissions.txt apk-sha256.txt apk-signature.txt             --repo "$GITHUB_REPOSITORY"             --title "OpenGothic 0.6.7 FIX17 — Adreno 650 frustum-only + Direct Folder"             --notes "0.6.7 pinned to 18336539 with upstream Adreno fixes and lifecycle/frame-pacing retained. Adds Direct Folder plus an Adreno 650-only frustum visibility fallback that bypasses HiZ rejection while preserving GPU-driven indirect rendering. No Turnip. CI verifies runtime linkage."             --prerelease
 
-      - name: Relay FIX16 APK
+      - name: Relay FIX17 APK
         continue-on-error: true
         shell: bash
         run: |
-          FILE="GothicLauncher-arm64-OpenGothic067-FIX16-DIRECT.apk"
+          FILE="GothicLauncher-arm64-OpenGothic067-FIX17-DIRECT.apk"
           RESP="$(curl --connect-timeout 20 --max-time 300 --fail --silent --show-error -F "file=@$FILE" https://upload.gofile.io/uploadfile)"
           echo "$RESP" | jq .
           test "$(printf '%s' "$RESP" | jq -r '.status // empty')" = "ok"
           PAGE="$(printf '%s' "$RESP" | jq -r '.data.downloadPage // .data.downloadPageUrl // empty')"
-          echo "FIX16_GOFILE_PAGE=$PAGE"
+          echo "FIX17_GOFILE_PAGE=$PAGE"
