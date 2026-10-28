@@ -329,6 +329,18 @@ replace_once(
 '''
 )
 
+
+replace_once(
+    "lib/Tempest/Engine/gapi/vulkan/vswapchain.cpp",
+'''#include <Tempest/Application>
+#include <Tempest/SystemApi>
+''',
+'''#include <Tempest/Application>
+#include <Tempest/SystemApi>
+#include <Tempest/Log>
+'''
+)
+
 replace_once(
     "lib/Tempest/Engine/gapi/vulkan/vswapchain.cpp",
 '''#elif defined(__ANDROID__)
@@ -481,6 +493,94 @@ replace_once(
   // next CPU frame behind SurfaceFlinger.
   imgIndex = uint32_t(-1);
   }
+'''
+)
+
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''    case APP_CMD_LOST_FOCUS:
+      focused = false;
+''',
+'''    case APP_CMD_LOST_FOCUS:
+      Log::i("Android lifecycle: LOST_FOCUS");
+      focused = false;
+'''
+)
+
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''    case APP_CMD_PAUSE:
+      resumed = false;
+''',
+'''    case APP_CMD_PAUSE:
+      Log::i("Android lifecycle: PAUSE");
+      resumed = false;
+'''
+)
+
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''    case APP_CMD_INIT_WINDOW:
+      updateWindow();
+''',
+'''    case APP_CMD_INIT_WINDOW:
+      Log::i("Android lifecycle: INIT_WINDOW");
+      updateWindow();
+'''
+)
+
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''    case APP_CMD_GAINED_FOCUS:
+      focused = true;
+''',
+'''    case APP_CMD_GAINED_FOCUS:
+      Log::i("Android lifecycle: GAINED_FOCUS");
+      focused = true;
+'''
+)
+
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''    case APP_CMD_RESUME:
+      resumed = true;
+''',
+'''    case APP_CMD_RESUME:
+      Log::i("Android lifecycle: RESUME");
+      resumed = true;
+'''
+)
+
+
+replace_once(
+    "lib/Tempest/Engine/gapi/vulkan/vswapchain.cpp",
+'''  VkSurfaceFormatKHR surfaceFormat = findSwapSurfaceFormat(swapChainSupport.formats);
+  VkPresentModeKHR   presentMode   = findSwapPresentMode  (swapChainSupport.presentModes);
+  VkExtent2D         extent        = findSwapExtent       (swapChainSupport.capabilities,uint32_t(rect.w),uint32_t(rect.h));
+  auto               alphaMode     = findAlphaMode        (swapChainSupport.capabilities.supportedCompositeAlpha);
+  uint32_t           imgCount      = findImageCount       (swapChainSupport);
+''',
+'''  VkSurfaceFormatKHR surfaceFormat = findSwapSurfaceFormat(swapChainSupport.formats);
+  VkPresentModeKHR   presentMode   = findSwapPresentMode  (swapChainSupport.presentModes);
+  VkExtent2D         extent        = findSwapExtent       (swapChainSupport.capabilities,uint32_t(rect.w),uint32_t(rect.h));
+  auto               alphaMode     = findAlphaMode        (swapChainSupport.capabilities.supportedCompositeAlpha);
+  uint32_t           imgCount      = findImageCount       (swapChainSupport);
+
+#if defined(__ANDROID__)
+  Log::i("Android Vulkan swapchain: presentMode=",uint32_t(presentMode),
+         " (0=IMMEDIATE,1=MAILBOX,2=FIFO,3=FIFO_RELAXED), images=",imgCount,
+         ", minImages=",swapChainSupport.capabilities.minImageCount,
+         ", maxImages=",swapChainSupport.capabilities.maxImageCount,
+         ", extent=",extent.width,"x",extent.height,
+         ", availablePresentModes=",swapChainSupport.presentModes.size());
+  for(auto m:swapChainSupport.presentModes)
+    Log::i("Android Vulkan available present mode: ",uint32_t(m));
+#endif
 '''
 )
 
