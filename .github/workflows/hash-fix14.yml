@@ -1,0 +1,28 @@
+name: Hash FIX14 APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/hash-fix14.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  hash:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix14-delivery
+      - name: Write hashes
+        run: |
+          sha1sum GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk | tee SHA1.txt
+          sha256sum GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk | tee SHA256.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add SHA1.txt SHA256.txt
+          git commit -m "Add FIX14 hashes [skip ci]"
+          git push origin fix14-delivery
