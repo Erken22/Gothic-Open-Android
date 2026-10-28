@@ -19,15 +19,26 @@ jobs:
         with:
           fetch-depth: 50
 
-      - name: Download latest tested APK candidate
+      - name: Download current APKs from all active tracks
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p checkpoint/apk
+          mkdir -p checkpoint/apk/modern checkpoint/apk/exact-067 checkpoint/apk/exact-064
+
           gh release download direct-folder-modern-latest \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern 'OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix5-arm64.apk' \
-            --dir checkpoint/apk
+            --pattern '*.apk' \
+            --dir checkpoint/apk/modern
+
+          gh release download exact-067-fix16 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.apk' \
+            --dir checkpoint/apk/exact-067
+
+          gh release download exact-064-fix15 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.apk' \
+            --dir checkpoint/apk/exact-064
 
       - name: Collect current source checkpoint
         shell: bash
@@ -49,11 +60,11 @@ jobs:
           cat > checkpoint/CHECKPOINT.md <<'EOF'
           # OpenGothic Android checkpoint — 2026-10-29
 
-          ## Current build
-          - Track: modern Android fork / direct-folder mode
-          - APK: OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix5-arm64.apk
+          ## Current builds
+          - Modern track: OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix10-arm64.apk
+          - Clean 0.6.7 baseline: GothicLauncher-arm64-OpenGothic067-FIX16-DIRECT.apk
+          - Exact 0.6.4 track: GothicLauncher-arm64-Exact064-FIX15-TURNIP-AUTO.apk
           - Architecture: ARM64
-          - Build type: Release
           - Game data: read directly from selected existing Gothic II NotR folder
           - Saves/settings: app-local
 
@@ -69,12 +80,12 @@ jobs:
           - NativeActivity TERM_WINDOW no longer intentionally exits the game.
           - Resume path tracks Android NativeWindow generations and forces Vulkan surface/swapchain rebuild once per surface generation.
 
-          ## Last user-observed state before this checkpoint
+          ## Last user-observed state / current work
           - Graphics became noticeably more stable; disappearing/glitching objects, walls and player model were reduced.
-          - Black screen after minimize/restore still existed before GraphicsFix5 was tested.
-          - FPS remained lower than desired unless graphics were reduced.
-          - GraphicsFix5 was built specifically to address remaining partial-geometry loss, resume double-reset/BufferQueue issue, and to use Release optimization.
-          - GraphicsFix5 has not yet been user-validated at the time this checkpoint was created.
+          - Remaining focus: Android minimize/restore black screen and FPS/optimization without lowering graphics.
+          - Modern work has advanced through GraphicsFix10.
+          - Exact 0.6.7 FIX16 is preserved as a clean Adreno baseline + Direct Folder.
+          - Exact 0.6.4 FIX15 is preserved as the Turnip-auto track.
 
           ## Latest log available in the chat
           - logcat_recording_2026-10-28_14-05-48.zip
@@ -102,8 +113,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view direct-folder-modern-latest --repo "$GITHUB_REPOSITORY" \
-            --json tagName,name,publishedAt,url,assets > checkpoint/metadata/latest-release.json
-          sha256sum checkpoint/apk/*.apk > checkpoint/metadata/apk-sha256.txt
+            --json tagName,name,publishedAt,url,assets > checkpoint/metadata/release-modern.json
+          gh release view exact-067-fix16 --repo "$GITHUB_REPOSITORY" \
+            --json tagName,name,publishedAt,url,assets > checkpoint/metadata/release-exact-067.json
+          gh release view exact-064-fix15 --repo "$GITHUB_REPOSITORY" \
+            --json tagName,name,publishedAt,url,assets > checkpoint/metadata/release-exact-064.json
+          find checkpoint/apk -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum > checkpoint/metadata/apk-sha256.txt
 
       - name: Create archive
         run: |
@@ -122,5 +137,5 @@ jobs:
             checkpoint-archive-sha256.txt \
             --repo "$GITHUB_REPOSITORY" \
             --title "OpenGothic Android checkpoint 2026-10-29" \
-            --notes "Full working checkpoint: current patches/workflows/overlay, sanitized source snapshot, latest GraphicsFix5 APK, commit/release metadata and current project state. Signing secrets are excluded." \
+            --notes "Full working checkpoint: current patches/workflows/overlay, sanitized source snapshot, current GraphicsFix10 + 0.6.7 FIX16 + 0.6.4 FIX15 APKs, commit/release metadata and current project state. Signing secrets are excluded." \
             --prerelease
