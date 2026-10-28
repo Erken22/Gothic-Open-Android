@@ -198,6 +198,17 @@ replace_once(
 )
 
 replace_once(
+    "android/launcher/res/values-de/og_strings.xml",
+    '<string name="og_import_zip">ZIP importieren</string>',
+    '<string name="og_import_zip">Spielordner auswählen</string>'
+)
+replace_once(
+    "android/launcher/res/values-pl/og_strings.xml",
+    '<string name="og_import_zip">Importuj ZIP</string>',
+    '<string name="og_import_zip">Wybierz folder gry</string>'
+)
+
+replace_once(
     "android/launcher/res/values/og_strings.xml",
     '    <string name="og_err_open_archive">Cannot open the archive.</string>\n',
     '    <string name="og_err_open_archive">Cannot open the archive.</string>\n'
@@ -210,6 +221,21 @@ replace_once(
     '    <string name="og_err_open_archive">Не удалось открыть архив.</string>\n'
     '    <string name="og_err_direct_folder">Выберите корневую папку Gothic, содержащую Data и _work.</string>\n'
     '    <string name="og_err_direct_primary">Выберите папку во внутренней общей памяти телефона.</string>\n'
+)
+
+replace_once(
+    "android/launcher/res/values-de/og_strings.xml",
+    '    <string name="og_err_open_archive">Das Archiv konnte nicht geöffnet werden.</string>\n',
+    '    <string name="og_err_open_archive">Das Archiv konnte nicht geöffnet werden.</string>\n'
+    '    <string name="og_err_direct_folder">Wähle den Gothic-Spielordner aus, der Data und _work enthält.</string>\n'
+    '    <string name="og_err_direct_primary">Wähle einen Ordner im gemeinsamen internen Speicher des Telefons aus.</string>\n'
+)
+replace_once(
+    "android/launcher/res/values-pl/og_strings.xml",
+    '    <string name="og_err_open_archive">Nie udało się otworzyć archiwum.</string>\n',
+    '    <string name="og_err_open_archive">Nie udało się otworzyć archiwum.</string>\n'
+    '    <string name="og_err_direct_folder">Wybierz główny folder gry Gothic zawierający Data i _work.</string>\n'
+    '    <string name="og_err_direct_primary">Wybierz folder we współdzielonej pamięci wewnętrznej telefonu.</string>\n'
 )
 
 # Engine side: if launcher wrote game-path.txt, use the absolute installation
