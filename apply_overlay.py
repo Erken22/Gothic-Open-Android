@@ -345,6 +345,32 @@ replace_once(
 '''
 )
 
+# Gradle performs a second CMake configure. After the first configure the
+# stock tempest-opengothic.patch is applied, then our post-config resume patch
+# adds extra lines to the same Tempest files. A strict git --reverse --check
+# can no longer recognize the stock patch at that point. The resume marker is
+# only created after a successful first configure, so it safely means the
+# stock patch is already present.
+replace_once(
+    "cmake/tempestpatch.cmake",
+'''  if(NOT OG_TEMPEST_PATCHED EQUAL 0)
+    execute_process(
+''',
+'''  if(NOT OG_TEMPEST_PATCHED EQUAL 0)
+    file(READ "\${OG_TEMPEST_DIR}/Engine/system/api/androidapi.h" OG_TEMPEST_ANDROIDAPI_H)
+    string(FIND "\${OG_TEMPEST_ANDROIDAPI_H}" "nativeWindow(SystemApi::Window* w)" OG_TEMPEST_RESUME_MARKER)
+    if(NOT OG_TEMPEST_RESUME_MARKER EQUAL -1)
+      # The normal OpenGothic patch was applied by the first configure and the
+      # post-config Android lifecycle patch extended those same files.
+      set(OG_TEMPEST_PATCHED 0)
+    endif()
+  endif()
+
+  if(NOT OG_TEMPEST_PATCHED EQUAL 0)
+    execute_process(
+'''
+)
+
 # Keep only Java pieces required for direct-folder launching and the game.
 java_dir = root / "android/java/org/opengothic/app"
 keep_java = {
