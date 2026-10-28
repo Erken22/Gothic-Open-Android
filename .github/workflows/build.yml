@@ -5,27 +5,32 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: direct-folder-android
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
 env:
   VK_SDK: "1.4.357.0"
+  BUILD_TYPE: "RelWithDebInfo"
 
 jobs:
   android-arm64:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 75
 
     steps:
       - name: Checkout builder
         uses: actions/checkout@v6
 
-      - name: Clone OpenGothic Android
+      - name: Clone current OpenGothic Android fork
         run: |
-          git clone --branch android --recurse-submodules --shallow-submodules --depth 1  \
-            https://github.com/Solessfir/OpenGothic.git src
+          git clone --branch touch-ui --recurse-submodules --shallow-submodules --depth 1 \
+            https://github.com/borsuczyna/OpenGothic-Android.git src
 
-      - name: Apply direct-folder overlay
+      - name: Apply direct-folder and Adreno overlay
         run: python3 apply_overlay.py src
 
       - name: Set up JDK 17
@@ -56,47 +61,64 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y glslang-tools ninja-build
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"  \
-            "platforms;android-35"  \
-            "build-tools;35.0.0"  \
-            "ndk;27.0.12077973"  \
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;27.0.12077973" \
             "cmake;3.22.1"
 
       - name: Generate build version
         run: |
           {
             echo '#pragma once'
-            echo "static const char* appBuild = \"Direct Folder $GITHUB_SHA\";"
+            echo "static const char* appBuild = \"Direct Folder Adreno Safe $GITHUB_SHA\";"
           } > src/game/build.h
 
       - name: Configure Android ARM64
         run: |
-          test -x "$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.9/bin/gradle"
-          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" -S src -B src/build/android -G Ninja  \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.0.12077973/build/cmake/android.toolchain.cmake"  \
-            -DANDROID_ABI=arm64-v8a  \
-            -DANDROID_PLATFORM=android-24  \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DOPENGOTHIC_ANDROID_GAME=gothic2notr \
-            -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.9/bin/gradle"
+          GRADLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.9/bin/gradle"
+          test -x "$GRADLE"
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" -S src -B src/build/android -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.0.12077973/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+            -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$GRADLE"
 
       - name: Build APK
-        continue-on-error: true
         run: |
           "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -j 2
 
       - name: Collect and verify APK
+        shell: bash
         run: |
-          APK="$(find src/build/android -path '*/build/outputs/apk/debug/*.apk' -type f | head -n 1)"
+          APK=""
+          while IFS= read -r candidate; do
+            if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$candidate" 2>/dev/null | grep -q "package: name='org.opengothic.mobile'"; then
+              APK="$candidate"
+              break
+            fi
+          done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
+
           test -n "$APK"
-          cp "$APK" OpenGothic-Gothic2-DirectFolder-debug-arm64.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose OpenGothic-Gothic2-DirectFolder-debug-arm64.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions OpenGothic-Gothic2-DirectFolder-debug-arm64.apk | tee apk-permissions.txt
+          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650Safe-arm64.apk"
+          cp "$APK" "$OUT"
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUT"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$OUT" | tee apk-permissions.txt
           grep -q "android.permission.MANAGE_EXTERNAL_STORAGE" apk-permissions.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | head -n 12 | tee apk-badging.txt
+          sha256sum "$OUT" | tee apk-sha256.txt
 
       - name: Publish APK to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete direct-folder-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          gh release create direct-folder-latest             OpenGothic-Gothic2-DirectFolder-debug-arm64.apk             apk-permissions.txt             --repo "$GITHUB_REPOSITORY"             --title "OpenGothic Gothic II NotR Direct Folder"             --notes "Debug ARM64 build. Select the installed Gothic II: Night of the Raven folder on Android and run directly from it."             --prerelease
+          gh release create direct-folder-latest \
+            OpenGothic-Gothic2-DirectFolder-Adreno650Safe-arm64.apk \
+            apk-permissions.txt apk-badging.txt apk-sha256.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "OpenGothic Gothic II NotR Direct Folder - Adreno Safe" \
+            --notes "ARM64 RelWithDebInfo test build based on the current Android fork. Reads game data directly from the selected folder. Adreno 650 starts in SafeGpu minimal mode to avoid the Qualcomm Vulkan shader-compiler crash seen after the intro video." \
+            --prerelease
