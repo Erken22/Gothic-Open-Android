@@ -2,23 +2,93 @@
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
-layout(binding = 0)      uniform sampler2D         srcMip;
-layout(binding = 1, r16) uniform writeonly image2D dstMip;
+// A Qualcomm-safe HiZ reducer. The C++ side binds a consecutive window of
+// mip levels: level0 is read, levels1..4 are written. One dispatch computes
+// up to four levels inside a workgroup; a second 1x1 dispatch finishes the
+// top of the pyramid. No global counter or inter-workgroup synchronization.
+layout(binding = 0, r16) uniform coherent image2D mip0;
+layout(binding = 1, r16) uniform coherent image2D mip1;
+layout(binding = 2, r16) uniform coherent image2D mip2;
+layout(binding = 3, r16) uniform coherent image2D mip3;
+layout(binding = 4, r16) uniform coherent image2D mip4;
+
+layout(push_constant, std140) uniform PushConstant {
+  uint levels; // number of valid bound levels, including mip0 (2..5)
+  };
+
+shared float tile[8][8];
+
+float loadMip(int mip, ivec2 uv) {
+  switch(mip) {
+    case 0: return imageLoad(mip0,uv).x;
+    case 1: return imageLoad(mip1,uv).x;
+    case 2: return imageLoad(mip2,uv).x;
+    case 3: return imageLoad(mip3,uv).x;
+    case 4: return imageLoad(mip4,uv).x;
+    }
+  return 0.0;
+  }
+
+void storeMip(int mip, ivec2 uv, float z) {
+  switch(mip) {
+    case 1: imageStore(mip1,uv,vec4(z)); break;
+    case 2: imageStore(mip2,uv,vec4(z)); break;
+    case 3: imageStore(mip3,uv,vec4(z)); break;
+    case 4: imageStore(mip4,uv,vec4(z)); break;
+    }
+  }
+
+float gatherImage0(ivec2 uv, ivec2 srcSz) {
+  ivec2 p0 = uv*2;
+  ivec2 p1 = min(p0+ivec2(1),srcSz-ivec2(1));
+  float z00 = loadMip(0,ivec2(p0.x,p0.y));
+  float z01 = loadMip(0,ivec2(p0.x,p1.y));
+  float z10 = loadMip(0,ivec2(p1.x,p0.y));
+  float z11 = loadMip(0,ivec2(p1.x,p1.y));
+  return max(max(z00,z01),max(z10,z11));
+  }
+
+float gatherTile(ivec2 local) {
+  local *= 2;
+  float z00 = tile[local.x+0][local.y+0];
+  float z01 = tile[local.x+0][local.y+1];
+  float z10 = tile[local.x+1][local.y+0];
+  float z11 = tile[local.x+1][local.y+1];
+  return max(max(z00,z01),max(z10,z11));
+  }
 
 void main() {
-  ivec2 dst = ivec2(gl_GlobalInvocationID.xy);
-  ivec2 dstSz = imageSize(dstMip);
-  if(any(greaterThanEqual(dst,dstSz)))
+  if(levels<2)
     return;
 
-  ivec2 srcSz = textureSize(srcMip,0);
-  ivec2 p0 = dst*2;
-  ivec2 p1 = min(p0 + ivec2(1), srcSz - ivec2(1));
+  ivec2 local = ivec2(gl_LocalInvocationID.xy);
+  ivec2 group = ivec2(gl_WorkGroupID.xy);
+  ivec2 gsize = ivec2(gl_WorkGroupSize.xy);
 
-  float z00 = texelFetch(srcMip, ivec2(p0.x,p0.y), 0).x;
-  float z01 = texelFetch(srcMip, ivec2(p0.x,p1.y), 0).x;
-  float z10 = texelFetch(srcMip, ivec2(p1.x,p0.y), 0).x;
-  float z11 = texelFetch(srcMip, ivec2(p1.x,p1.y), 0).x;
+  ivec2 srcSz = imageSize(mip0);
+  ivec2 dstSz = max(ivec2(1),srcSz/2);
 
-  imageStore(dstMip, dst, vec4(max(max(z00,z01),max(z10,z11))));
+  ivec2 uv = group*gsize + local;
+  float z = 0.0;
+  if(all(lessThan(uv,dstSz))) {
+    z = gatherImage0(uv,srcSz);
+    storeMip(1,uv,z);
+    }
+
+  // Build the next levels from shared memory exactly like the original
+  // shader's per-workgroup reduction, but stop before any cross-workgroup step.
+  for(int i=2; i<int(levels) && i<5; ++i) {
+    tile[local.x][local.y] = z;
+    barrier();
+
+    gsize /= 2;
+    if(local.x<gsize.x && local.y<gsize.y) {
+      uv = group*gsize + local;
+      z  = gatherTile(local);
+      ivec2 levelSz = max(ivec2(1),srcSz >> i);
+      if(all(lessThan(uv,levelSz)))
+        storeMip(i,uv,z);
+      }
+    barrier();
+    }
   }
