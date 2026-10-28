@@ -106,7 +106,7 @@ jobs:
           grep -q "versionName='0.6.7'" apk-badging.txt
 
           unzip -l "$OUT" | tee apk-files.txt
-          for lib in libvulkan.so libvulkan_freedreno.so libadrenotools.so libmain_hook.so libhook_impl.so; do
+          for lib in libvulkan.so libvulkan_freedreno.so libadrenotools.so libmain_hook.so libhook_impl.so libc++_shared.so; do
             grep -q "lib/arm64-v8a/$lib" apk-files.txt
           done
 
@@ -118,7 +118,9 @@ jobs:
 
           "$READELF" -d packaged-libopengothic.so | tee needed.txt
           grep -q "Shared library: \[libvulkan.so\]" needed.txt
-          "$READELF" -Ws packaged-libopengothic.so | awk '$8=="__gxx_personality_v0" && $7!="UND" {ok=1} END {exit ok?0:1}'
+          grep -q "Shared library: \[libc++_shared.so\]" needed.txt
+          unzip -p "$OUT" lib/arm64-v8a/libc++_shared.so > packaged-libc++_shared.so
+          "$READELF" -Ws packaged-libc++_shared.so | awk '$8=="__gxx_personality_v0" && $7!="UND" {ok=1} END {exit ok?0:1}'
 
           "$NM" -D --defined-only packaged-libvulkan.so | tee vulkan-exports.txt
           grep -q "opengothic_vulkan_is_turnip" vulkan-exports.txt
