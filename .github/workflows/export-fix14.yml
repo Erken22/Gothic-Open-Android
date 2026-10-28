@@ -1,0 +1,33 @@
+name: Export FIX14 APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/export-fix14.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download FIX14 bytes from private release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download exact-064-fix13 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "GothicLauncher-arm64-Exact064-FIX13-IME-CULL-PERF.apk"
+          mv GothicLauncher-arm64-Exact064-FIX13-IME-CULL-PERF.apk \
+             GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk
+          sha256sum GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk
+      - name: Export APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GothicLauncher-FIX14
+          path: GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk
+          compression-level: 0
+          retention-days: 1
