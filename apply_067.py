@@ -227,6 +227,21 @@ replace_once(
     "android/launcher/res/values-de/og_strings.xml",
     '    <string name="og_err_open_archive">Das Archiv konnte nicht geöffnet werden.</string>\n',
     '    <string name="og_err_open_archive">Das Archiv konnte nicht geöffnet werden.</string>\n'
+    '    <string name="og_err_direct_folder">Wähle den Gothic-Spielordner mit Data und _work aus.</string>\n'
+    '    <string name="og_err_direct_primary">Wähle einen Ordner im gemeinsamen internen Speicher des Telefons aus.</string>\n'
+)
+replace_once(
+    "android/launcher/res/values-pl/og_strings.xml",
+    '    <string name="og_err_open_archive">Nie udało się otworzyć archiwum.</string>\n',
+    '    <string name="og_err_open_archive">Nie udało się otworzyć archiwum.</string>\n'
+    '    <string name="og_err_direct_folder">Wybierz główny folder gry Gothic zawierający Data i _work.</string>\n'
+    '    <string name="og_err_direct_primary">Wybierz folder we współdzielonej pamięci wewnętrznej telefonu.</string>\n'
+)
+
+replace_once(
+    "android/launcher/res/values-de/og_strings.xml",
+    '    <string name="og_err_open_archive">Das Archiv konnte nicht geöffnet werden.</string>\n',
+    '    <string name="og_err_open_archive">Das Archiv konnte nicht geöffnet werden.</string>\n'
     '    <string name="og_err_direct_folder">Wähle den Gothic-Spielordner aus, der Data und _work enthält.</string>\n'
     '    <string name="og_err_direct_primary">Wähle einen Ordner im gemeinsamen internen Speicher des Telefons aus.</string>\n'
 )
