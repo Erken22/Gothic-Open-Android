@@ -27,6 +27,11 @@ replace_once(
 #if defined(__ANDROID__)
     using PerfClock = std::chrono::steady_clock;
     const auto perfFrameStart = PerfClock::now();
+    auto perfTickEnd    = perfFrameStart;
+    auto perfUiEnd      = perfFrameStart;
+    auto perfEncodeEnd  = perfFrameStart;
+    auto perfSubmitEnd  = perfFrameStart;
+    auto perfPresentEnd = perfFrameStart;
     static uint64_t perfTickUs=0, perfUiUs=0, perfEncodeUs=0;
     static uint64_t perfSubmitUs=0, perfPresentUs=0, perfFrameUs=0;
     static uint32_t perfFrameCount=0;
@@ -41,7 +46,7 @@ replace_once(
 ''',
 '''      tickCamera(dt);
 #if defined(__ANDROID__)
-      const auto perfTickEnd = PerfClock::now();
+      perfTickEnd = PerfClock::now();
 #endif
       }
 '''
@@ -56,7 +61,7 @@ replace_once(
 '''    inventory.setCovered(document.isActive() || chapter.isActive() || video.isActive());
 
 #if defined(__ANDROID__)
-    const auto perfUiEnd = PerfClock::now();
+    perfUiEnd = PerfClock::now();
 #endif
     CommandBuffer& cmd = commands[cmdId];
 '''
@@ -72,15 +77,15 @@ replace_once(
 '''#endif
     }
 #if defined(__ANDROID__)
-    const auto perfEncodeEnd = PerfClock::now();
+    perfEncodeEnd = PerfClock::now();
 #endif
     sync = device.submit(cmd);
 #if defined(__ANDROID__)
-    const auto perfSubmitEnd = PerfClock::now();
+    perfSubmitEnd = PerfClock::now();
 #endif
     device.present(swapchain);
 #if defined(__ANDROID__)
-    const auto perfPresentEnd = PerfClock::now();
+    perfPresentEnd = PerfClock::now();
     auto perfUs = [](auto a, auto b)->uint64_t {
       return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(b-a).count());
       };
