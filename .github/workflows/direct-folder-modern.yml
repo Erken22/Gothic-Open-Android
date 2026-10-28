@@ -1,5 +1,5 @@
-name: Build Modern Direct Folder GraphicsFix8
-# workflow revision: graphicsfix8-stable-props-cpu-profiler
+name: Build Modern Direct Folder GraphicsFix9
+# workflow revision: graphicsfix9-lazy-acquire-safe-static-lod-miui-resume
 
 on:
   push:
@@ -75,7 +75,7 @@ jobs:
         run: |
           {
             echo '#pragma once'
-            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix8 $GITHUB_SHA\";"
+            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix9 $GITHUB_SHA\";"
           } > src/game/build.h
 
       - name: Configure Android ARM64
@@ -116,7 +116,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
 
           test -n "$APK"
-          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix8-arm64.apk"
+          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix9-arm64.apk"
           cp "$APK" "$OUT"
 
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUT"
@@ -131,9 +131,9 @@ jobs:
         run: |
           gh release delete direct-folder-modern-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           gh release create direct-folder-modern-latest \
-            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix8-arm64.apk \
+            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix9-arm64.apk \
             apk-permissions.txt apk-badging.txt apk-sha256.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --title "OpenGothic Modern Direct Folder - GraphicsFix8" \
-            --notes "Modern Android fork / ARM64 Release. Removes the remaining screen-size culling that made tiny props flicker at 50% internal resolution. HiZ remains enabled for baked world geometry, while instanced VOBs use stable frustum/distance visibility. Keeps triple buffering/MAILBOX/resume fixes and adds detailed per-stage CPU frame profiling (tick/UI/encode/submit/present) because device logs show low FPS with gpuFenceBusy=0." \
+            --title "OpenGothic Modern Direct Folder - GraphicsFix9" \
+            --notes "Modern Android fork / ARM64 Release. Performance pass from device CPU timings: lazy swapchain acquire so game tick/UI can overlap display progress, Android prefers MAILBOX/FIFO_RELAXED before FIFO, far static VOBs regain conservative LOD and HiZ while characters/morph/water remain full and non-occluded. Keeps triple buffering. Resume rendering no longer waits for MIUI GAINED_FOCUS; RESUME+NativeWindow is sufficient. Detailed per-stage profiling remains enabled." \
             --prerelease
