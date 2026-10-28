@@ -37,6 +37,7 @@ public final class SetupActivity extends Activity {
     private TextView pathView;
     private Button play;
     private boolean waitingPermission;
+    private boolean launching;
 
     @Override
     public void onCreate(Bundle state) {
@@ -241,6 +242,7 @@ public final class SetupActivity extends Activity {
     }
 
     private void launchGame() {
+        if (launching) return;
         if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
             chooseFolder();
             return;
@@ -258,12 +260,21 @@ public final class SetupActivity extends Activity {
             try (FileOutputStream out = new FileOutputStream(new File(root, "game-path.txt"))) {
                 out.write((game.getCanonicalPath() + "\n").getBytes(StandardCharsets.UTF_8));
             }
+            // Keep the Android profile/game identity identical to the stock launcher.
+            // Native code uses this for User/Gothic2 and other per-game state.
+            try (FileOutputStream out = new FileOutputStream(new File(root, "game.txt"))) {
+                out.write("Gothic2\n".getBytes(StandardCharsets.UTF_8));
+            }
         } catch (IOException error) {
             message("Не удалось подготовить запуск: " + error.getMessage());
             return;
         }
 
+        launching = true;
         startActivity(new Intent(this, org.tempest.TempestNativeActivity.class));
+        // Match the stock Solessfir launcher lifecycle: do not keep SetupActivity
+        // behind the native game activity, because Tempest owns the game surface.
+        finish();
     }
 
     private void message(String text) {
