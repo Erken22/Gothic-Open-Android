@@ -11,8 +11,8 @@ def replace_once(rel, old, new):
         raise SystemExit(f"post-config resume patch anchor not found in {rel}: {old[:180]!r}")
     p.write_text(s.replace(old, new, 1), encoding="utf-8")
 
-# This script MUST run after CMake configure: the Android fork applies
-# patches/tempest-opengothic.patch to lib/Tempest during configure.
+# This script runs after the first CMake configure, when the Android fork has
+# already applied its normal Tempest patch.
 
 replace_once(
     "lib/Tempest/Engine/system/api/androidapi.h",
@@ -43,7 +43,9 @@ struct AndroidWindowHandle {
   int32_t        height = 0;
   };
 static AndroidWindowHandle androidWindow;
+static ANativeWindow* retiredWindow = nullptr;
 static bool windowInvalidated = false;
+static bool windowResetPending = false;
 '''
 )
 
@@ -66,6 +68,52 @@ void* AndroidApi::nativeWindow(SystemApi::Window* w) {
     return nullptr;
   auto* h = reinterpret_cast<AndroidWindowHandle*>(w);
   return h->native;
+  }
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''void AndroidApi::updateFocus() {
+  const bool next = resumed && focused;
+  if(active==next)
+    return;
+  active = next;
+  if(mainWindow!=nullptr) {
+    FocusEvent event(active,Event::FocusReason::UnknownReason);
+    AndroidApi::dispatchFocus(*mainWindow,event);
+    }
+  }
+''',
+'''static void applyPendingWindowReset() {
+  if(!windowResetPending || !active || !hasWindow || mainWindow==nullptr || androidWindow.native==nullptr)
+    return;
+
+  windowResetPending = false;
+  Log::i("Android applying deferred surface/swapchain reset: ",
+         androidWindow.width,"x",androidWindow.height);
+
+  SizeEvent event(androidWindow.width,androidWindow.height);
+  AndroidApi::dispatchResize(*mainWindow,event);
+
+  if(retiredWindow!=nullptr) {
+    ANativeWindow_release(retiredWindow);
+    retiredWindow = nullptr;
+    }
+  }
+
+void AndroidApi::updateFocus() {
+  const bool next = resumed && focused && hasWindow;
+  if(active!=next) {
+    active = next;
+    if(mainWindow!=nullptr) {
+      FocusEvent event(active,Event::FocusReason::UnknownReason);
+      AndroidApi::dispatchFocus(*mainWindow,event);
+      }
+    }
+
+  if(active)
+    applyPendingWindowReset();
   }
 '''
 )
@@ -99,32 +147,54 @@ replace_once(
 
   const bool surfaceChanged = windowInvalidated || oldWindow!=newWindow;
   const bool sizeChanged    = androidWindow.width!=w || androidWindow.height!=h;
-  if(!surfaceChanged && !sizeChanged)
-    return;
 
-  if(oldWindow!=newWindow) {
-    ANativeWindow_acquire(newWindow);
-    androidWindow.native = newWindow;
+  if(surfaceChanged || sizeChanged) {
+    if(oldWindow!=newWindow) {
+      ANativeWindow_acquire(newWindow);
+
+      // Keep the window referenced by the current VkSurfaceKHR alive until the
+      // deferred reset has destroyed that surface. Intermediate NativeWindows
+      // that Vulkan never used can be released immediately.
+      if(retiredWindow==nullptr)
+        retiredWindow = oldWindow;
+      else if(oldWindow!=nullptr && oldWindow!=retiredWindow)
+        ANativeWindow_release(oldWindow);
+
+      androidWindow.native = newWindow;
+      }
+
+    androidWindow.width  = w;
+    androidWindow.height = h;
+    windowInvalidated    = false;
+    windowResetPending   = true;
+
+    Log::i("Android window available: ",w,"x",h,
+           ", surfaceChanged=",surfaceChanged,", sizeChanged=",sizeChanged,
+           ", deferredReset=1");
     }
 
-  androidWindow.width  = w;
-  androidWindow.height = h;
-  windowInvalidated    = false;
-
-  Log::i("Android window init/resume: ",w,"x",h,
-         ", surfaceChanged=",surfaceChanged,", sizeChanged=",sizeChanged);
-
-  // Exactly one reset per new surface generation. Android commonly sends
-  // APP_CMD_WINDOW_RESIZED immediately after APP_CMD_INIT_WINDOW with the
-  // same dimensions; a second reset can exhaust the BufferQueue maxImages.
-  SizeEvent event(w,h);
-  AndroidApi::dispatchResize(*mainWindow,event);
-
-  // Keep the old ANativeWindow alive until resizeEvent/reset destroyed the
-  // old VkSurfaceKHR, then release it.
-  if(oldWindow!=nullptr && oldWindow!=newWindow)
-    ANativeWindow_release(oldWindow);
+  // INIT_WINDOW may arrive before RESUME or GAINED_FOCUS. If lifecycle flags
+  // are already active this applies immediately; otherwise updateFocus() on a
+  // later command will perform exactly one reset.
+  updateFocus();
   }
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''    case APP_CMD_CONFIG_CHANGED: {
+      //TODO: dedicated event for dpi/safe-rects
+      if(mainWindow!=nullptr && app!=nullptr && app->window!=nullptr) {
+        SizeEvent event(ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
+        SystemApi::dispatchResize(*mainWindow, event);
+        }
+      break;
+      }
+''',
+'''    case APP_CMD_CONFIG_CHANGED:
+      updateWindow();
+      break;
 '''
 )
 
@@ -141,17 +211,17 @@ replace_once(
       break;
 ''',
 '''    case APP_CMD_TERM_WINDOW:
-      // Backgrounding/recents destroys only the NativeWindow surface. Mark one
-      // surface generation invalid so the next INIT_WINDOW forces exactly one
-      // Vulkan surface/swapchain rebuild even if Android reuses the pointer.
+      // Losing the NativeWindow is a suspend, not an application close.
       hasWindow = false;
-      active = false;
       windowInvalidated = true;
+      windowResetPending = true;
       releaseAllTouches();
+      updateFocus();
       Log::i("Android window suspended (TERM_WINDOW), keeping game alive");
       break;
     case APP_CMD_DESTROY:
       hasWindow = false;
+      updateFocus();
       if(mainWindow!=nullptr) {
         CloseEvent event;
         AndroidApi::dispatchClose(*mainWindow,event);
@@ -171,7 +241,9 @@ replace_once(
   androidWindow.native = app->window;
   androidWindow.width   = ANativeWindow_getWidth(androidWindow.native);
   androidWindow.height  = ANativeWindow_getHeight(androidWindow.native);
+  retiredWindow         = nullptr;
   windowInvalidated     = false;
+  windowResetPending    = false;
   ANativeWindow_acquire(androidWindow.native);
   return reinterpret_cast<SystemApi::Window*>(&androidWindow);
 '''
@@ -187,12 +259,17 @@ replace_once(
 ''',
 '''void AndroidApi::implDestroyWindow(SystemApi::Window* w) {
   auto* h = reinterpret_cast<AndroidWindowHandle*>(w);
+  if(retiredWindow!=nullptr) {
+    ANativeWindow_release(retiredWindow);
+    retiredWindow = nullptr;
+    }
   if(h!=nullptr && h->native!=nullptr) {
     ANativeWindow_release(h->native);
     h->native = nullptr;
     h->width  = 0;
     h->height = 0;
     }
+  windowResetPending = false;
   mainWindow = nullptr;
   touches.clear();
   }
@@ -257,8 +334,9 @@ replace_once(
 '''void VSwapchain::reset() {
   cleanupSwapchain();
 #if defined(__ANDROID__)
-  // A resumed NativeActivity has a new ANativeWindow; VkSurfaceKHR from the
-  // previous one is no longer reusable.
+  // A resumed NativeActivity can have a different ANativeWindow even at the
+  // same size. The old VkSurfaceKHR must be destroyed before recreating the
+  // swapchain against the current AndroidWindowHandle.
   cleanupSurface();
 #endif
   createSwapchain(device);
@@ -266,4 +344,4 @@ replace_once(
 '''
 )
 
-print("Post-config Tempest Android suspend/resume patch applied")
+print("Post-config Tempest deferred Android suspend/resume patch applied")
