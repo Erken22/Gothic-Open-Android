@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: exact-gothic-launcher-064
+  group: exact-gothic-launcher-064-fix15
   cancel-in-progress: true
 
 permissions:
