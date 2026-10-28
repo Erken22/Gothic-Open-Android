@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 /**
  * Starts OpenGothic directly from a legally owned Gothic II installation
@@ -196,12 +195,6 @@ public final class DirectFolderActivity extends Activity {
         }
         if (!isInstallation(dir)) {
             message("Это не корень Gothic II. Нужны папки Data и _work.");
-            return;
-        }
-
-        List<String> broken = GameFiles.brokenArchives(dir);
-        if (!broken.isEmpty()) {
-            message("Повреждён или не полностью скопирован VDF: " + broken.get(0));
             return;
         }
 
