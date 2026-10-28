@@ -6,6 +6,11 @@ on:
     paths:
       - apply_067.py
       - .github/workflows/build-067.yml
+  pull_request:
+    branches: [fix16-067-base]
+    paths:
+      - apply_067.py
+      - .github/workflows/build-067.yml
   workflow_dispatch:
 
 concurrency:
@@ -120,6 +125,7 @@ jobs:
           echo "FIX16 runtime/linkage verification: PASS"
 
       - name: Publish FIX16 release
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
