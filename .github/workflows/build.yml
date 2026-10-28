@@ -152,11 +152,11 @@ jobs:
             symbols-sha256.txt
 
       - name: Relay FIX15 APK for direct testing
+        continue-on-error: true
         shell: bash
         run: |
           FILE="GothicLauncher-arm64-Exact064-FIX15-TURNIP-AUTO.apk"
-          RESP="$(curl --connect-timeout 20 --max-time 300 --fail --silent --show-error \\
-            -F "file=@$FILE" https://upload.gofile.io/uploadfile)"
+          RESP="$(curl --connect-timeout 20 --max-time 300 --fail --silent --show-error -F "file=@$FILE" https://upload.gofile.io/uploadfile)"
           echo "$RESP" | jq .
           test "$(printf '%s' "$RESP" | jq -r '.status // empty')" = "ok"
           PAGE="$(printf '%s' "$RESP" | jq -r '.data.downloadPage // .data.downloadPageUrl // empty')"
@@ -165,9 +165,7 @@ jobs:
           TOKEN="$(printf '%s' "$RESP" | jq -r '.data.guestToken // empty')"
           echo "FIX15_GOFILE_PAGE=$PAGE"
           if [ -n "$TOKEN" ] && [ -n "$FOLDER" ] && [ -n "$FILEID" ]; then
-            META="$(curl --connect-timeout 20 --max-time 60 --fail --silent --show-error \\
-              -H "Authorization: Bearer $TOKEN" \\
-              "https://api.gofile.io/contents/$FOLDER")"
+            META="$(curl --connect-timeout 20 --max-time 60 --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "https://api.gofile.io/contents/$FOLDER")"
             LINK="$(printf '%s' "$META" | jq -r --arg id "$FILEID" '.data.children[$id].link // .data.children[$id].directLink // empty')"
             echo "FIX15_GOFILE_DIRECT_LINK=$LINK"
           fi
