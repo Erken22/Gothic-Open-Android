@@ -39,8 +39,11 @@ static bool             hasWindow  = false;
 
 struct AndroidWindowHandle {
   ANativeWindow* native = nullptr;
+  int32_t        width  = 0;
+  int32_t        height = 0;
   };
 static AndroidWindowHandle androidWindow;
+static bool windowInvalidated = false;
 '''
 )
 
@@ -91,20 +94,34 @@ replace_once(
 
   ANativeWindow* oldWindow = androidWindow.native;
   ANativeWindow* newWindow = app->window;
+  const int32_t w = ANativeWindow_getWidth(newWindow);
+  const int32_t h = ANativeWindow_getHeight(newWindow);
+
+  const bool surfaceChanged = windowInvalidated || oldWindow!=newWindow;
+  const bool sizeChanged    = androidWindow.width!=w || androidWindow.height!=h;
+  if(!surfaceChanged && !sizeChanged)
+    return;
+
   if(oldWindow!=newWindow) {
     ANativeWindow_acquire(newWindow);
     androidWindow.native = newWindow;
     }
 
-  Log::i("Android window init/resume: ",
-         ANativeWindow_getWidth(newWindow),"x",ANativeWindow_getHeight(newWindow));
+  androidWindow.width  = w;
+  androidWindow.height = h;
+  windowInvalidated    = false;
 
-  // MainWindow::resizeEvent waits in-flight fences and resets the swapchain.
-  // VSwapchain::reset() below recreates VkSurfaceKHR against newWindow.
-  SizeEvent event(ANativeWindow_getWidth(newWindow),ANativeWindow_getHeight(newWindow));
+  Log::i("Android window init/resume: ",w,"x",h,
+         ", surfaceChanged=",surfaceChanged,", sizeChanged=",sizeChanged);
+
+  // Exactly one reset per new surface generation. Android commonly sends
+  // APP_CMD_WINDOW_RESIZED immediately after APP_CMD_INIT_WINDOW with the
+  // same dimensions; a second reset can exhaust the BufferQueue maxImages.
+  SizeEvent event(w,h);
   AndroidApi::dispatchResize(*mainWindow,event);
 
-  // Keep the old ANativeWindow alive until the old VkSurfaceKHR is destroyed.
+  // Keep the old ANativeWindow alive until resizeEvent/reset destroyed the
+  // old VkSurfaceKHR, then release it.
   if(oldWindow!=nullptr && oldWindow!=newWindow)
     ANativeWindow_release(oldWindow);
   }
@@ -124,10 +141,12 @@ replace_once(
       break;
 ''',
 '''    case APP_CMD_TERM_WINDOW:
-      // Backgrounding/recents destroys only the NativeWindow surface. Do not
-      // turn that into CloseEvent/application exit; INIT_WINDOW will resume.
+      // Backgrounding/recents destroys only the NativeWindow surface. Mark one
+      // surface generation invalid so the next INIT_WINDOW forces exactly one
+      // Vulkan surface/swapchain rebuild even if Android reuses the pointer.
       hasWindow = false;
       active = false;
+      windowInvalidated = true;
       releaseAllTouches();
       Log::i("Android window suspended (TERM_WINDOW), keeping game alive");
       break;
@@ -150,6 +169,9 @@ replace_once(
 ''',
 '''  mainWindow = owner;
   androidWindow.native = app->window;
+  androidWindow.width   = ANativeWindow_getWidth(androidWindow.native);
+  androidWindow.height  = ANativeWindow_getHeight(androidWindow.native);
+  windowInvalidated     = false;
   ANativeWindow_acquire(androidWindow.native);
   return reinterpret_cast<SystemApi::Window*>(&androidWindow);
 '''
@@ -168,6 +190,8 @@ replace_once(
   if(h!=nullptr && h->native!=nullptr) {
     ANativeWindow_release(h->native);
     h->native = nullptr;
+    h->width  = 0;
+    h->height = 0;
     }
   mainWindow = nullptr;
   touches.clear();
