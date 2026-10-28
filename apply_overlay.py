@@ -295,8 +295,8 @@ replace_once(
 '''  // Expand by one base HiZ texel on every side. This makes the query
   // conservative at tile boundaries: extra sampled area can only raise the
   // max-depth value and therefore can never create a false occlusion.
-  ibbox[0] -= ivec2(1);
-  ibbox[1] += ivec2(1);
+  ibbox[0] -= ivec2(2);
+  ibbox[1] += ivec2(2);
   ibbox[0] = clamp(ibbox[0], ivec2(0), hiZsize - ivec2(1));
   ibbox[1] = clamp(ibbox[1], ivec2(0), hiZsize - ivec2(1));
 
@@ -304,7 +304,7 @@ replace_once(
   float z       = hiZFetch(hiZ, ibbox);
   // R16 stores the pyramid at half-float precision. Require a real depth gap,
   // not a quantization-sized difference, before rejecting a cluster.
-  const float conservativeDepthBias = 0.0025;
+  const float conservativeDepthBias = 0.01;
   if(bz > z + conservativeDepthBias)
     return false;
 '''
@@ -320,17 +320,11 @@ replace_once(
   }
 ''',
 '''bool projectCluster(const Cluster cluster, out vec4 aabb, out float depthMin) {
-  if(cluster.instanceId==0xFFFFFFFF)
-    return projectSphere(cluster.sphere, aabb, depthMin);
-
-  const uint bId = cluster.bucketId_commandId >> 16;
-  // Skinning and morph animation can move vertices outside the static bucket
-  // AABB. Their world-space cluster sphere is updated for visibility and is a
-  // safer bound for occlusion; this prevents body parts from disappearing.
-  if((bucket[bId].flags & (BK_SKIN | BK_MORPH))!=0)
-    return projectSphere(cluster.sphere, aabb, depthMin);
-
-  return projectInstance(cluster, aabb, depthMin);
+  // Use the world-space cluster sphere for every HiZ query. It is looser than
+  // the bucket AABB but cannot cut off animated vertices, split static meshes,
+  // wall pieces or authored meshlet bounds. HiZ remains active; only the bound
+  // used to prove full occlusion becomes conservative.
+  return projectSphere(cluster.sphere, aabb, depthMin);
   }
 '''
 )
@@ -350,6 +344,242 @@ replace_once(
     const auto ret = zenkit::lenient_vm_exception_handler(v,exc,instr);
 '''
 )
+
+# ---------------------------------------------------------------------------
+# Android lifecycle / resume support in Tempest
+#
+# NativeActivity emits APP_CMD_TERM_WINDOW whenever the app is backgrounded.
+# Tempest currently treats TERM_WINDOW exactly like DESTROY, sends CloseEvent
+# and exits the process. Keep the logical Window alive instead. A stable
+# wrapper tracks the current ANativeWindow; on INIT_WINDOW we switch it,
+# dispatch resize, recreate Vulkan surface/swapchain, then release the old
+# native window.
+# ---------------------------------------------------------------------------
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.h",
+'''    static std::filesystem::path internalDataPath();
+    static std::filesystem::path externalDataPath();
+''',
+'''    static std::filesystem::path internalDataPath();
+    static std::filesystem::path externalDataPath();
+    static void*                 nativeWindow(SystemApi::Window* w);
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''static bool             active     = false;
+static bool             hasWindow  = false;
+''',
+'''static bool             active     = false;
+static bool             hasWindow  = false;
+
+struct AndroidWindowHandle {
+  ANativeWindow* native = nullptr;
+  };
+static AndroidWindowHandle androidWindow;
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''std::filesystem::path AndroidApi::externalDataPath() {
+  assert(app!=nullptr && app->activity!=nullptr);
+  const char* path = app->activity->externalDataPath;
+  return path!=nullptr ? path : "";
+  }
+''',
+'''std::filesystem::path AndroidApi::externalDataPath() {
+  assert(app!=nullptr && app->activity!=nullptr);
+  const char* path = app->activity->externalDataPath;
+  return path!=nullptr ? path : "";
+  }
+
+void* AndroidApi::nativeWindow(SystemApi::Window* w) {
+  if(w==nullptr)
+    return nullptr;
+  auto* h = reinterpret_cast<AndroidWindowHandle*>(w);
+  return h->native;
+  }
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''void AndroidApi::updateWindow() {
+  if(app==nullptr || app->window==nullptr)
+    return;
+
+  hasWindow = true;
+  if(mainWindow==nullptr)
+    return;
+
+  SizeEvent event(ANativeWindow_getWidth(app->window),ANativeWindow_getHeight(app->window));
+  AndroidApi::dispatchResize(*mainWindow,event);
+  }
+''',
+'''void AndroidApi::updateWindow() {
+  if(app==nullptr || app->window==nullptr)
+    return;
+
+  hasWindow = true;
+  if(mainWindow==nullptr)
+    return;
+
+  ANativeWindow* oldWindow = androidWindow.native;
+  ANativeWindow* newWindow = app->window;
+  if(oldWindow!=newWindow) {
+    ANativeWindow_acquire(newWindow);
+    androidWindow.native = newWindow;
+    }
+
+  Log::i("Android window init/resume: ",
+         ANativeWindow_getWidth(newWindow),"x",ANativeWindow_getHeight(newWindow));
+
+  // MainWindow::resizeEvent resets the swapchain. The Android Vulkan backend
+  // recreates VkSurfaceKHR on reset, so it now binds the new ANativeWindow.
+  SizeEvent event(ANativeWindow_getWidth(newWindow),ANativeWindow_getHeight(newWindow));
+  AndroidApi::dispatchResize(*mainWindow,event);
+
+  // The old window must remain referenced until the old Vulkan surface has
+  // been destroyed by resizeEvent/swapchain.reset().
+  if(oldWindow!=nullptr && oldWindow!=newWindow)
+    ANativeWindow_release(oldWindow);
+  }
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''    case APP_CMD_TERM_WINDOW:
+    case APP_CMD_DESTROY:
+      hasWindow = false;
+      if(mainWindow!=nullptr) {
+        CloseEvent event;
+        AndroidApi::dispatchClose(*mainWindow,event);
+        }
+      isExit.store(true);
+      break;
+''',
+'''    case APP_CMD_TERM_WINDOW:
+      // Normal Android backgrounding destroys only the native surface. Keep
+      // the game process, world and Tempest Window alive until INIT_WINDOW.
+      hasWindow = false;
+      active = false;
+      releaseAllTouches();
+      Log::i("Android window suspended (TERM_WINDOW), keeping game alive");
+      break;
+    case APP_CMD_DESTROY:
+      hasWindow = false;
+      if(mainWindow!=nullptr) {
+        CloseEvent event;
+        AndroidApi::dispatchClose(*mainWindow,event);
+        }
+      isExit.store(true);
+      break;
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''  mainWindow = owner;
+  ANativeWindow_acquire(app->window);
+  return reinterpret_cast<SystemApi::Window*>(app->window);
+''',
+'''  mainWindow = owner;
+  androidWindow.native = app->window;
+  ANativeWindow_acquire(androidWindow.native);
+  return reinterpret_cast<SystemApi::Window*>(&androidWindow);
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''void AndroidApi::implDestroyWindow(SystemApi::Window* w) {
+  ANativeWindow_release(reinterpret_cast<ANativeWindow*>(w));
+  mainWindow = nullptr;
+  touches.clear();
+  }
+''',
+'''void AndroidApi::implDestroyWindow(SystemApi::Window* w) {
+  auto* h = reinterpret_cast<AndroidWindowHandle*>(w);
+  if(h!=nullptr && h->native!=nullptr) {
+    ANativeWindow_release(h->native);
+    h->native = nullptr;
+    }
+  mainWindow = nullptr;
+  touches.clear();
+  }
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/system/api/androidapi.cpp",
+'''Rect AndroidApi::implWindowClientRect(SystemApi::Window* w) {
+  const auto window = reinterpret_cast<ANativeWindow*>(w);
+  return Rect(0,0,ANativeWindow_getWidth(window),ANativeWindow_getHeight(window));
+  }
+''',
+'''Rect AndroidApi::implWindowClientRect(SystemApi::Window* w) {
+  auto* h = reinterpret_cast<AndroidWindowHandle*>(w);
+  if(h==nullptr || h->native==nullptr)
+    return Rect();
+  return Rect(0,0,ANativeWindow_getWidth(h->native),ANativeWindow_getHeight(h->native));
+  }
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/gapi/vulkan/vswapchain.cpp",
+'''#elif defined(__ANDROID__)
+#  include <android/native_window.h>
+#  include <vulkan/vulkan_android.h>
+''',
+'''#elif defined(__ANDROID__)
+#  include <android/native_window.h>
+#  include <vulkan/vulkan_android.h>
+#  include "system/api/androidapi.h"
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/gapi/vulkan/vswapchain.cpp",
+'''#elif defined(__ANDROID__)
+  VkAndroidSurfaceCreateInfoKHR createInfo = {};
+  createInfo.sType  = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+  createInfo.window = reinterpret_cast<ANativeWindow*>(hwnd);
+  return vkCreateAndroidSurfaceKHR(instance,&createInfo,nullptr,pSurface);
+''',
+'''#elif defined(__ANDROID__)
+  VkAndroidSurfaceCreateInfoKHR createInfo = {};
+  createInfo.sType  = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+  createInfo.window = reinterpret_cast<ANativeWindow*>(
+      AndroidApi::nativeWindow(reinterpret_cast<SystemApi::Window*>(hwnd)));
+  if(createInfo.window==nullptr)
+    return VK_ERROR_SURFACE_LOST_KHR;
+  return vkCreateAndroidSurfaceKHR(instance,&createInfo,nullptr,pSurface);
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/gapi/vulkan/vswapchain.cpp",
+'''void VSwapchain::reset() {
+  cleanupSwapchain();
+  createSwapchain(device);
+  }
+''',
+'''void VSwapchain::reset() {
+  cleanupSwapchain();
+#if defined(__ANDROID__)
+  // APP_CMD_TERM_WINDOW invalidates the old Android surface. INIT_WINDOW may
+  // point the stable Tempest window handle at a different ANativeWindow.
+  cleanupSurface();
+#endif
+  createSwapchain(device);
+  }
+'''
+)
+
 
 # Keep only Java pieces required for direct-folder launching and the game.
 java_dir = root / "android/java/org/opengothic/app"
@@ -397,4 +627,4 @@ dep_end = ct.index(dep_end_marker, dep_start) + len(dep_end_marker)
 ct = ct[:dep_start] + '    )' + ct[dep_end:]
 cmake.write_text(ct, encoding="utf-8")
 
-print("Direct-folder + Adreno 650 conservative HiZ + full mobile graphics/FPS overlay applied")
+print("Direct-folder + conservative HiZ + Android resume/swapchain fix applied")
