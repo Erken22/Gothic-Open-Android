@@ -1,0 +1,38 @@
+name: Deliver verified FIX19 APK
+on:
+  push:
+    branches: [delivery-fix19-audit]
+    paths: [.github/workflows/deliver-fix19.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deliver:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Download completed FIX19 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          for attempt in $(seq 1 100); do
+            if gh release download exact-067-fix19 --repo "$GITHUB_REPOSITORY" --pattern '*.apk' --pattern 'apk-sha256.txt' --pattern 'apk-signature.txt' --pattern 'apk-badging.txt' --clobber; then
+              break
+            fi
+            sleep 20
+          done
+          test -s GothicLauncher-arm64-OpenGothic067-FIX19-TURNIP.apk
+          sha256sum -c apk-sha256.txt
+          unzip -t GothicLauncher-arm64-OpenGothic067-FIX19-TURNIP.apk > zip-integrity.txt
+          grep -q "versionName='0.6.7'" apk-badging.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenGothic-FIX19-verified
+          path: |
+            *.apk
+            apk-sha256.txt
+            apk-signature.txt
+            apk-badging.txt
+            zip-integrity.txt
+          retention-days: 30
