@@ -1,5 +1,5 @@
-name: Build Modern Direct Folder GraphicsFix4
-# workflow revision: graphicsfix4-resume-v2
+name: Build Modern Direct Folder GraphicsFix5
+# workflow revision: graphicsfix5-upstream-meshlets-resume-v3
 
 on:
   push:
@@ -19,7 +19,7 @@ permissions:
   contents: write
 
 env:
-  BUILD_TYPE: "RelWithDebInfo"
+  BUILD_TYPE: "Release"
 
 jobs:
   android-arm64:
@@ -71,7 +71,7 @@ jobs:
         run: |
           {
             echo '#pragma once'
-            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix4 Resume $GITHUB_SHA\";"
+            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix5 $GITHUB_SHA\";"
           } > src/game/build.h
 
       - name: Configure Android ARM64
@@ -112,7 +112,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
 
           test -n "$APK"
-          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix4-Resume-arm64.apk"
+          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix5-arm64.apk"
           cp "$APK" "$OUT"
 
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUT"
@@ -127,9 +127,9 @@ jobs:
         run: |
           gh release delete direct-folder-modern-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           gh release create direct-folder-modern-latest \
-            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix4-Resume-arm64.apk \
+            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix5-arm64.apk \
             apk-permissions.txt apk-badging.txt apk-sha256.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --title "OpenGothic Modern Direct Folder - GraphicsFix4 + Resume" \
-            --notes "Modern Android fork / ARM64 RelWithDebInfo. Direct folder, full rendering, Adreno 650 two-pass HiZ with explicit read/write dependencies and conservative sphere occlusion. Fixes NativeActivity background/resume by keeping the Tempest Window alive and recreating Android Vulkan surface/swapchain on INIT_WINDOW." \
+            --title "OpenGothic Modern Direct Folder - GraphicsFix5" \
+            --notes "Modern Android fork / ARM64 Release. Restores upstream full meshlet ranges (removes Android-only meshlet LOD that could hide heads/parts of walls and props). HiZ stays enabled for static world geometry, while dynamic and large near-camera clusters use frustum/distance only. Adreno 650 keeps the two-pass HiZ reducer with explicit dependencies. Resume rebuilds the Android Vulkan surface/swapchain exactly once per surface generation to avoid BufferQueue maxImages/black-screen failures." \
             --prerelease
