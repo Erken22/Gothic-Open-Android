@@ -395,6 +395,20 @@ replace_once(
 '''
 )
 
+# Keep three CPU command/fence slots in flight on Android. Tempest's Android
+# swapchain normally asks for minImageCount+1 (typically 3), so two application
+# slots unnecessarily serialize CPU/GPU work. This changes buffering only, not
+# rendering quality.
+replace_once(
+    "common/resources.h",
+    '''      MaxFramesInFlight = 2,
+      ShadowLayers      = 2,
+''',
+    '''      MaxFramesInFlight = 3,
+      ShadowLayers      = 2,
+'''
+)
+
 # The Russian scripts contain a BL target with no function symbol. ZenKit's
 # lenient VM already treats this instruction as skippable. Avoid stopping on
 # the red script-error overlay for exactly that known lenient case.
@@ -483,7 +497,7 @@ dep_end = ct.index(dep_end_marker, dep_start) + len(dep_end_marker)
 ct = ct[:dep_start] + '    )' + ct[dep_end:]
 cmake.write_text(ct, encoding="utf-8")
 
-print("Direct-folder + upstream meshlets + selective HiZ + FPS/resume instrumentation applied")
+print("Direct-folder + upstream meshlets + selective HiZ + triple-buffer FPS/resume instrumentation applied")
 
 # Resume-safe swapchain teardown: presentation may outlive frame fences.
 replace_once(
