@@ -264,8 +264,11 @@ replace_once(
 '''
 )
 
-# Do not drop scene detail as an Android-only shortcut. HiZ already handles
-# occlusion; the main and shadow views should keep the complete geometry list.
+# The fork's original 2px/1px thresholds caused visible popping. Use only
+# sub-pixel rejection for static non-animated details: below this size the
+# object cannot contribute a stable visible pixel, while skipping it saves
+# visibility payload and draw work. Characters/morph/water are excluded by
+# the shader itself.
 replace_once(
     "common/graphics/drawcommands.cpp",
 '''    if(viewport==SceneGlobals::V_Main) {
@@ -276,10 +279,10 @@ replace_once(
       const auto& shadow = *scene.shadowMap[viewport-SceneGlobals::V_Shadow0];
 ''',
 '''    if(viewport==SceneGlobals::V_Main) {
-      push.minObjectPixels = 0.f;
+      push.minObjectPixels = 0.35f;
       }
     else if(SceneGlobals::isShadowView(viewport)) {
-      push.minObjectPixels = 0.f;
+      push.minObjectPixels = 0.5f;
       const auto& shadow = *scene.shadowMap[viewport-SceneGlobals::V_Shadow0];
 '''
 )
@@ -366,10 +369,10 @@ replace_once(
 '''
 )
 
-# HiZ remains enabled for the static world, where it saves the most work.
-# Dynamic/instanced objects are cheap relative to the world and are vulnerable
-# to stale authored bounds, so use frustum+distance only for them. Also keep
-# large near-camera static clusters out of HiZ to prevent wall/door popping.
+# Keep HiZ for the expensive static world and static instances. Characters,
+# morphing geometry and water bypass occlusion because their bounds change.
+# Large near-camera clusters also bypass HiZ. This restores most of the
+# performance benefit without reintroducing the partial-character bug.
 replace_once(
     "shader/materials/visibility_pass.comp",
 '''#if defined(HIZ)
@@ -378,7 +381,11 @@ replace_once(
 #endif
 ''',
 '''#if defined(HIZ)
-  bool useHiZ = (cluster.instanceId==0xFFFFFFFF);
+  const uint hizBucketId = cluster.bucketId_commandId >> 16;
+  const bool dynamicGeometry =
+      cluster.instanceId!=0xFFFFFFFF &&
+      (bucket[hizBucketId].flags & (BK_SKIN | BK_MORPH | BK_WATER))!=0;
+  bool useHiZ = !dynamicGeometry;
   const vec2 projectedSpan = max(aabb.zw-aabb.xy,vec2(0));
   if(max(projectedSpan.x,projectedSpan.y)>0.10)
     useHiZ = false;
