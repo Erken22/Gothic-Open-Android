@@ -200,14 +200,19 @@ replace_once(
 
 replace_once(
     "lib/Tempest/Engine/system/api/androidapi.cpp",
-'''    case APP_CMD_CONFIG_CHANGED:
-      // Orientation/config changes often arrive immediately after INIT_WINDOW.
-      // Route them through the same generation/size guard so the Vulkan
-      // swapchain is never reset twice for one resumed NativeWindow.
-      updateWindow();
+'''    case APP_CMD_CONFIG_CHANGED: {
+      //TODO: dedicated event for dpi/safe-rects
+      if(mainWindow!=nullptr && app!=nullptr && app->window!=nullptr) {
+        SizeEvent event(ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
+        SystemApi::dispatchResize(*mainWindow, event);
+        }
       break;
+      }
 ''',
 '''    case APP_CMD_CONFIG_CHANGED:
+      // Route configuration changes through the same deferred surface
+      // generation guard as INIT_WINDOW/WINDOW_RESIZED. This prevents a
+      // second swapchain rebuild for the same resumed NativeWindow.
       updateWindow();
       break;
 '''
