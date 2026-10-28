@@ -66,7 +66,7 @@ jobs:
         run: |
           {
             echo '#pragma once'
-            echo "static const char* appBuild = \"Direct Folder Adreno Safe $GITHUB_SHA\";"
+            echo "static const char* appBuild = \"Direct Folder Adreno650 HiZ Compat $GITHUB_SHA\";"
           } > src/game/build.h
 
       - name: Configure Android ARM64
@@ -104,7 +104,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
 
           test -n "$APK"
-          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650Safe-arm64.apk"
+          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650HiZCompat-arm64.apk"
           cp "$APK" "$OUT"
 
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUT"
@@ -119,9 +119,9 @@ jobs:
         run: |
           gh release delete direct-folder-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           gh release create direct-folder-latest \
-            OpenGothic-Gothic2-DirectFolder-Adreno650Safe-arm64.apk \
+            OpenGothic-Gothic2-DirectFolder-Adreno650HiZCompat-arm64.apk \
             apk-permissions.txt apk-badging.txt apk-sha256.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --title "OpenGothic Gothic II NotR Direct Folder - Adreno Safe" \
-            --notes "ARM64 RelWithDebInfo test build based on the current Android fork. Reads game data directly from the selected folder. Adreno 650 starts in SafeGpu minimal mode to avoid the Qualcomm Vulkan shader-compiler crash seen after the intro video." \
+            --title "OpenGothic Gothic II NotR Direct Folder - Adreno 650 HiZ Compat" \
+            --notes "ARM64 RelWithDebInfo build. Reads game data directly from the selected folder. Full rendering is restored: HiZ and occlusion culling remain enabled. Only the HiZ mip-chain implementation is replaced on Adreno 650 with a one-dispatch-per-mip compatibility path that avoids the Qualcomm driver crash without disabling graphics features." \
             --prerelease
