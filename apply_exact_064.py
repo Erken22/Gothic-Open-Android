@@ -828,3 +828,298 @@ replace_once(
 print("FIX15: bundled Turnip v27-r2 + AdrenoTools proxy + System/Turnip launcher selector")
 
 # FIX15_BUILD_RETRY_2
+
+
+# ---------------------------------------------------------------------------
+# FIX15B: use AdrenoTools as a vendor-driver bridge, NOT as libvulkan.so.
+# Tempest directly imports Vulkan symbols, so its DT_NEEDED libvulkan.so must
+# remain Android's full system loader. The bridge initializes AdrenoTools before
+# TempestNativeActivity loads libopengothic.so.
+# ---------------------------------------------------------------------------
+
+# Undo the proxy target injection into the Vulkan link name.
+replace_once(
+    "CMakeLists.txt",
+'''if(ANDROID)
+  add_subdirectory(android/driverproxy)
+endif()
+add_subdirectory(lib/Tempest/Engine)
+if(ANDROID)
+  add_dependencies(Gothic2Notr vulkan main_hook hook_impl)
+endif()
+''',
+'''if(ANDROID)
+  add_subdirectory(android/driverbridge)
+endif()
+add_subdirectory(lib/Tempest/Engine)
+if(ANDROID)
+  add_dependencies(Gothic2Notr driverbridge main_hook hook_impl c11_threads_compat)
+endif()
+'''
+)
+
+# Package bridge/hook targets, while leaving Tempest's "vulkan" link name to
+# resolve against Android's NDK/system loader.
+replace_once(
+    "lib/Tempest/Engine/cmake/android/build.gradle.in",
+'''                targets.add(@NATIVE_TARGET@)
+                targets.add('vulkan')
+                targets.add('main_hook')
+                targets.add('hook_impl')
+''',
+'''                targets.add(@NATIVE_TARGET@)
+                targets.add('driverbridge')
+                targets.add('main_hook')
+                targets.add('hook_impl')
+                targets.add('c11_threads_compat')
+'''
+)
+
+bridge_dir = root / "android/driverbridge"
+if bridge_dir.exists():
+    shutil.rmtree(bridge_dir)
+bridge_dir.mkdir(parents=True)
+shutil.copytree(proxy_dir / "vendor", bridge_dir / "vendor")
+
+(bridge_dir / "CMakeLists.txt").write_text(r'''cmake_minimum_required(VERSION 3.22)
+project(gothic_driver_bridge LANGUAGES C CXX)
+
+if(NOT ANDROID OR NOT ANDROID_ABI STREQUAL "arm64-v8a")
+  message(FATAL_ERROR "Gothic driver bridge supports Android arm64-v8a only")
+endif()
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+add_link_options("-Wl,-z,max-page-size=16384")
+
+add_subdirectory(vendor/libadrenotools)
+
+add_library(driverbridge SHARED driver_bridge.cpp)
+target_compile_options(driverbridge PRIVATE -Wall -Wextra -Werror -fvisibility=hidden)
+target_link_libraries(driverbridge PRIVATE adrenotools log dl)
+add_dependencies(driverbridge main_hook hook_impl c11_threads_compat)
+''', encoding="utf-8")
+
+(bridge_dir / "driver_bridge.cpp").write_text(r'''#include <jni.h>
+#include <android/log.h>
+#include <adrenotools/driver.h>
+#include <vulkan/vulkan.h>
+#include <dlfcn.h>
+#include <cstdlib>
+#include <cstring>
+#include <mutex>
+#include <string>
+#include <vector>
+
+namespace {
+constexpr const char* TAG = "GothicDriver";
+std::mutex lock;
+void* loader = nullptr;
+bool attempted = false;
+std::string status = "{\"ok\":false,\"error\":\"not initialized\"}";
+
+std::string quote(const std::string& s) {
+  std::string r = "\"";
+  for(char c:s) {
+    if(c=='\\' || c=='\"') { r.push_back('\\'); r.push_back(c); }
+    else if(c=='\n') r += "\\n";
+    else r.push_back(c);
+  }
+  r += "\"";
+  return r;
+}
+
+std::string js(JNIEnv* e, jstring v) {
+  if(v==nullptr) return {};
+  const char* p=e->GetStringUTFChars(v,nullptr);
+  if(p==nullptr) return {};
+  std::string s(p);
+  e->ReleaseStringUTFChars(v,p);
+  return s;
+}
+
+bool verifyTurnip(void* h, std::string& detail) {
+  auto gipa = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(h,"vkGetInstanceProcAddr"));
+  if(gipa==nullptr) { detail="missing vkGetInstanceProcAddr"; return false; }
+
+  auto create = reinterpret_cast<PFN_vkCreateInstance>(gipa(VK_NULL_HANDLE,"vkCreateInstance"));
+  if(create==nullptr) { detail="missing vkCreateInstance"; return false; }
+
+  VkApplicationInfo app{};
+  app.sType=VK_STRUCTURE_TYPE_APPLICATION_INFO;
+  app.pApplicationName="OpenGothic Turnip Probe";
+  app.apiVersion=VK_API_VERSION_1_1;
+  VkInstanceCreateInfo ci{};
+  ci.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  ci.pApplicationInfo=&app;
+  VkInstance inst=VK_NULL_HANDLE;
+  VkResult vr=create(&ci,nullptr,&inst);
+  if(vr!=VK_SUCCESS || inst==VK_NULL_HANDLE) {
+    detail="vkCreateInstance="+std::to_string(int(vr));
+    return false;
+  }
+
+  auto enumerate = reinterpret_cast<PFN_vkEnumeratePhysicalDevices>(
+      gipa(inst,"vkEnumeratePhysicalDevices"));
+  auto props = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
+      gipa(inst,"vkGetPhysicalDeviceProperties"));
+  auto props2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+      gipa(inst,"vkGetPhysicalDeviceProperties2"));
+  auto destroy = reinterpret_cast<PFN_vkDestroyInstance>(
+      gipa(inst,"vkDestroyInstance"));
+
+  bool ok=false;
+  if(enumerate && props) {
+    uint32_t n=0;
+    if(enumerate(inst,&n,nullptr)==VK_SUCCESS && n>0 && n<16) {
+      std::vector<VkPhysicalDevice> dev(n);
+      if(enumerate(inst,&n,dev.data())==VK_SUCCESS && n>0) {
+        VkPhysicalDeviceProperties p{};
+        props(dev[0],&p);
+        std::string driverName;
+        std::string driverInfo;
+        if(props2) {
+          VkPhysicalDeviceDriverProperties dp{};
+          dp.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+          VkPhysicalDeviceProperties2 p2{};
+          p2.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+          p2.pNext=&dp;
+          props2(dev[0],&p2);
+          driverName=dp.driverName;
+          driverInfo=dp.driverInfo;
+        }
+        std::string low=driverName+" "+driverInfo;
+        for(char& c:low) c=char(std::tolower(static_cast<unsigned char>(c)));
+        ok = low.find("turnip")!=std::string::npos ||
+             low.find("mesa")!=std::string::npos ||
+             low.find("freedreno")!=std::string::npos;
+        detail = std::string(p.deviceName)+" | "+driverName+" | "+driverInfo;
+      }
+    }
+  }
+  if(destroy) destroy(inst,nullptr);
+  return ok;
+}
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_opengothic_app_DriverBridge_nativeInit(
+    JNIEnv* env, jclass, jstring nativeDirJ, jstring driverDirJ,
+    jstring filenameJ, jboolean customJ) {
+  std::lock_guard<std::mutex> guard(lock);
+  if(attempted) return env->NewStringUTF(status.c_str());
+  attempted=true;
+
+  const bool custom=customJ==JNI_TRUE;
+  if(!custom) {
+    unsetenv("OG_TURNIP");
+    status="{\"ok\":true,\"mode\":\"system\"}";
+    __android_log_print(ANDROID_LOG_INFO,TAG,"System Vulkan selected");
+    return env->NewStringUTF(status.c_str());
+  }
+
+  std::string nativeDir=js(env,nativeDirJ);
+  std::string driverDir=js(env,driverDirJ);
+  std::string filename=js(env,filenameJ);
+  if(nativeDir.empty() || driverDir.empty() || filename.empty()) {
+    status="{\"ok\":false,\"mode\":\"turnip\",\"error\":\"invalid driver path\"}";
+    return env->NewStringUTF(status.c_str());
+  }
+  if(nativeDir.back()!='/') nativeDir.push_back('/');
+  if(driverDir.back()!='/') driverDir.push_back('/');
+
+  loader=adrenotools_open_libvulkan(
+      RTLD_NOW|RTLD_LOCAL,
+      ADRENOTOOLS_DRIVER_CUSTOM,
+      driverDir.c_str(),
+      nativeDir.c_str(),
+      driverDir.c_str(),
+      filename.c_str(),
+      nullptr,nullptr);
+
+  if(loader==nullptr) {
+    unsetenv("OG_TURNIP");
+    status="{\"ok\":false,\"mode\":\"turnip\",\"error\":\"adrenotools_open_libvulkan failed\"}";
+    __android_log_print(ANDROID_LOG_ERROR,TAG,"%s",status.c_str());
+    return env->NewStringUTF(status.c_str());
+  }
+
+  std::string detail;
+  if(!verifyTurnip(loader,detail)) {
+    unsetenv("OG_TURNIP");
+    status="{\"ok\":false,\"mode\":\"turnip\",\"error\":\"custom driver fell back or probe failed\",\"detail\":"+
+           quote(detail)+"}";
+    __android_log_print(ANDROID_LOG_ERROR,TAG,"%s",status.c_str());
+    return env->NewStringUTF(status.c_str());
+  }
+
+  setenv("OG_TURNIP","1",1);
+  status="{\"ok\":true,\"mode\":\"turnip\",\"detail\":"+quote(detail)+"}";
+  __android_log_print(ANDROID_LOG_INFO,TAG,"%s",status.c_str());
+  return env->NewStringUTF(status.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_opengothic_app_DriverBridge_nativeStatus(JNIEnv* env,jclass) {
+  std::lock_guard<std::mutex> guard(lock);
+  return env->NewStringUTF(status.c_str());
+}
+''', encoding="utf-8")
+
+# The bridge is a normal JNI library; it must load before libopengothic.
+driver_java_path.write_text(driver_java.replace(
+'''            File proxy = new File(nativeDir, "libvulkan.so");
+            if (!proxy.isFile()) throw new IllegalStateException("Vulkan proxy is missing");
+
+''',
+'''            System.loadLibrary("driverbridge");
+
+'''
+).replace(
+'''            System.load(proxy.getAbsolutePath());
+            loaded = true;
+            JSONObject result = new JSONObject(nativeInit(nativeDir.getAbsolutePath(),
+''',
+'''            loaded = true;
+            JSONObject result = new JSONObject(nativeInit(nativeDir.getAbsolutePath(),
+'''
+), encoding="utf-8")
+
+# FIX14 is required only for the proprietary Qualcomm driver. Turnip gets the
+# full HiZ path back, so it can recover the performance lost by frustum-only.
+replace_once(
+    "common/graphics/drawcommands.cpp",
+    '#include <cstring>\n',
+    '#include <cstring>\n#include <cstdlib>\n'
+)
+replace_once(
+    "common/graphics/drawcommands.cpp",
+'''    const bool match = name!=nullptr && std::strstr(name,"Adreno")!=nullptr &&
+                       std::strstr(name,"650")!=nullptr;
+''',
+'''    const bool match = std::getenv("OG_TURNIP")==nullptr &&
+                       name!=nullptr && std::strstr(name,"Adreno")!=nullptr &&
+                       std::strstr(name,"650")!=nullptr;
+'''
+)
+
+# Flat varyings were needed by the proprietary Qualcomm shader compiler. Turnip
+# should use the normal bindless material interface.
+replace_once(
+    "common/graphics/shaders.cpp",
+    '#include <cassert>\n',
+    '#include <cassert>\n#include <cstdlib>\n'
+)
+replace_once(
+    "common/graphics/shaders.cpp",
+'''    const bool enabled = name.find("Adreno")!=std::string_view::npos && (name.find("610")!=std::string_view::npos || name.find("650")!=std::string_view::npos);
+''',
+'''    const bool enabled = std::getenv("OG_TURNIP")==nullptr &&
+                         name.find("Adreno")!=std::string_view::npos &&
+                         (name.find("610")!=std::string_view::npos || name.find("650")!=std::string_view::npos);
+'''
+)
+
+print("FIX15B: AdrenoTools vendor bridge keeps Android libvulkan loader intact; Turnip restores full HiZ")
