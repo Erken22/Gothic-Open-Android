@@ -319,7 +319,7 @@ new_visibility = '''void DrawCommands::visibilityPass(Encoder<CommandBuffer>& cm
   if(freeze)
     return;
 
-  static const bool adreno650VisibilityFallback = []() {
+  [[maybe_unused]] static const bool adreno650VisibilityFallback = []() {
 #if defined(__ANDROID__)
     const std::string_view name = Resources::device().properties().name;
     const bool match = name.find("Adreno")!=std::string_view::npos &&
