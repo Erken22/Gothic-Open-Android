@@ -64,7 +64,10 @@ jobs:
 
       - name: Generate build version
         run: |
-          printf '#pragma once\\nstatic const char* appBuild = "Direct Folder %s";\\n' "$GITHUB_SHA" > src/game/build.h
+          {
+            echo '#pragma once'
+            echo "static const char* appBuild = \"Direct Folder $GITHUB_SHA\";"
+          } > src/game/build.h
 
       - name: Configure Android ARM64
         run: |
