@@ -499,27 +499,6 @@ replace_once(
 '''
 )
 
-# Android resume: wait for all queued GPU/present work before destroying the
-# old swapchain/surface. Fences cover submitted command buffers, but the
-# presentation engine can still own swapchain images after TERM_WINDOW.
-replace_once(
-    "common/mainwindow.cpp",
-'''void MainWindow::resizeEvent(SizeEvent&) {
-  for(auto& i:fence)
-    i.wait();
-  swapchain.reset();
-''',
-'''void MainWindow::resizeEvent(SizeEvent&) {
-#ifdef __ANDROID__
-  Log::i("Android swapchain rebuild: waitIdle before reset");
-  device.waitIdle();
-#endif
-  for(auto& i:fence)
-    i.wait();
-  swapchain.reset();
-'''
-)
-
 # The user's GraphicsFix5 log still contains a saved 30 FPS mobile preference.
 # Do not reduce any graphics setting; only remove that legacy frame cap on
 # Adreno 650 so the renderer can run as fast as it actually can.
