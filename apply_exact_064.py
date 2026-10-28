@@ -464,7 +464,11 @@ new_build_hiz = '''void Renderer::buildHiZ(Tempest::Encoder<Tempest::CommandBuff
   const uint32_t mip = hiz.hiZ.mipCount();
   const std::string_view gpuName = Resources::device().properties().name;
   const bool adreno650 = gpuName.find("Adreno")!=std::string_view::npos &&
-                         gpuName.find("650")!=std::string_view::npos;
+                         gpuName.find("650")!=std::string_view::npos
+#if defined(__ANDROID__)
+                         && opengothic_vulkan_is_turnip()==0
+#endif
+                         ;
   if(adreno650) {
     static bool logged = false;
     if(!logged) {
@@ -567,7 +571,7 @@ print("FIX13: IME typing restored, conservative cluster bounds, two-pass HiZ, fl
 replace_once(
     "common/graphics/drawcommands.cpp",
     '#include <Tempest/Log>\n',
-    '#include <Tempest/Log>\n#include <cstring>\n'
+    '#include <Tempest/Log>\n#include <cstring>\n#if defined(__ANDROID__)\nextern "C" int opengothic_vulkan_is_turnip();\n#endif\n'
 )
 
 old_visibility = '''void DrawCommands::visibilityPass(Encoder<CommandBuffer>& cmd, int pass) {
@@ -601,7 +605,8 @@ new_visibility = '''void DrawCommands::visibilityPass(Encoder<CommandBuffer>& cm
 #if defined(__ANDROID__)
     const char* name = Resources::device().properties().name;
     const bool match = name!=nullptr && std::strstr(name,"Adreno")!=nullptr &&
-                       std::strstr(name,"650")!=nullptr;
+                       std::strstr(name,"650")!=nullptr &&
+                       opengothic_vulkan_is_turnip()==0;
     if(match)
       Log::i("Visibility: Adreno 650 frustum-only fallback enabled; HiZ rejection bypassed");
     return match;
@@ -651,5 +656,102 @@ new_pso = '''    auto* pso = &Shaders::inst().visibilityPassSh;
 replace_once("common/graphics/drawcommands.cpp", old_pso, new_pso)
 
 print("FIX14: Adreno 650 frustum-only visibility fallback; HiZ no longer rejects scene geometry")
+
+# ---------------------------------------------------------------------------
+# FIX15: app-local Vulkan proxy + bundled Turnip support
+# ---------------------------------------------------------------------------
+
+# Force Android to extract native libraries. libadrenotools installs hook
+# libraries from nativeLibraryDir and cannot operate on compressed/in-APK .so.
+replace_once(
+    "android/launcher/AndroidManifest.xml",
+    '        android:hasCode="true"\n',
+    '        android:hasCode="true"\n        android:extractNativeLibs="true"\n'
+)
+
+# Package prebuilt Turnip/adrenotools hook libraries and request legacy JNI
+# packaging so nativeLibraryDir contains real files.
+replace_once(
+    "lib/Tempest/Engine/cmake/android/build.gradle.in",
+'''def extraAssets = assetProperty ? providers.gradleProperty(assetProperty).orNull : null
+''',
+'''def extraAssets = assetProperty ? providers.gradleProperty(assetProperty).orNull : null
+def nativeSourceRoot = file(@NATIVE_CMAKE@).parentFile
+'''
+)
+replace_once(
+    "lib/Tempest/Engine/cmake/android/build.gradle.in",
+'''        main {
+            manifest.srcFile file(@MANIFEST@)
+            java.srcDirs = @JAVA_DIRS@
+            res.srcDirs = @RESOURCE_DIRS@
+            assets.srcDirs = @ASSET_DIRS@
+''',
+'''        main {
+            manifest.srcFile file(@MANIFEST@)
+            java.srcDirs = @JAVA_DIRS@
+            res.srcDirs = @RESOURCE_DIRS@
+            assets.srcDirs = @ASSET_DIRS@
+            jniLibs.srcDirs += [new File(nativeSourceRoot, "android/turnip/jniLibs")]
+'''
+)
+replace_once(
+    "lib/Tempest/Engine/cmake/android/build.gradle.in",
+'''    androidResources {
+        noCompress.addAll(@NO_COMPRESS@)
+    }
+''',
+'''    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+    androidResources {
+        noCompress.addAll(@NO_COMPRESS@)
+    }
+'''
+)
+
+# Define an app-local target named "vulkan" before Tempest is added. Tempest's
+# target_link_libraries(... vulkan) then resolves to this proxy rather than the
+# system loader. The proxy forwards the 107 Vulkan imports to Turnip or stock.
+replace_once(
+    "CMakeLists.txt",
+'''# Tempest
+if(WIN32)
+''',
+'''# FIX15 Android Vulkan proxy: generated from Khronos vk.xml by CI.
+if(ANDROID)
+  add_library(vulkan SHARED android/turnip/vulkan_proxy.cpp)
+  target_include_directories(vulkan PRIVATE "$ENV{VULKAN_SDK}/include")
+  target_link_libraries(vulkan PRIVATE dl log)
+  set_target_properties(vulkan PROPERTIES OUTPUT_NAME "vulkan")
+endif()
+
+# Tempest
+if(WIN32)
+'''
+)
+replace_once(
+    "CMakeLists.txt",
+'''target_link_libraries(Gothic2Notr PRIVATE OpenGothic)
+''',
+'''target_link_libraries(Gothic2Notr PRIVATE OpenGothic)
+if(ANDROID)
+  target_link_libraries(Gothic2Notr PRIVATE vulkan)
+endif()
+'''
+)
+
+# Renderer chooses the stock-driver HiZ workaround only when the proxy says
+# Turnip did NOT load. Turnip gets the normal engine HiZ path.
+replace_once(
+    "common/graphics/renderer.cpp",
+    '#include "renderer.h"\n',
+    '#include "renderer.h"\n#if defined(__ANDROID__)\nextern "C" int opengothic_vulkan_is_turnip();\n#endif\n'
+)
+
+print("FIX15: app-local Vulkan proxy enabled; Turnip restores full HiZ, system keeps FIX14 fallback")
+
 
 
