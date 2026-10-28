@@ -511,8 +511,7 @@ replace_once(
 '''#ifdef OPENGOTHIC_TOUCH_UI
   zMaxFps = std::clamp(AndroidInput::preferences().fps,30,60);
 #if defined(__ANDROID__)
-  if(Resources::device().properties().name!=nullptr &&
-     std::strstr(Resources::device().properties().name,"Adreno (TM) 650")!=nullptr)
+  if(std::strstr(Resources::device().properties().name,"Adreno (TM) 650")!=nullptr)
     zMaxFps = 60;
 #endif
 #endif
