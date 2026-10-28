@@ -254,6 +254,15 @@ replace_once(
     Gothic::flushSettings();
     }
 
+  if(Gothic::settingsGetI(Section,"version")<6) {
+    // GraphicsFix5 log still showed fps=30. Clear that stale cap once while
+    // preserving resolution, shadows and effects exactly as the player chose.
+    if(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingFps])<=30)
+      Gothic::settingsSetI(Section,SettingNames[Mobile::SettingFps],60);
+    Gothic::settingsSetI(Section,"version",6);
+    Gothic::flushSettings();
+    }
+
   {
     const auto p = preferences();
     Log::i("Mobile profile: resolution=",p.resolution,"%, shadows=",p.shadows,
@@ -337,6 +346,37 @@ replace_once(
   // used to prove full occlusion becomes conservative.
   return projectSphere(cluster.sphere, aabb, depthMin);
   }
+'''
+)
+
+# Dynamic main-view geometry bypasses HiZ, so do not spend GPU compute on
+# screen-space sphere projection unless a later test actually needs it.
+replace_once(
+    "shader/materials/visibility_pass.comp",
+'''#if defined(MAIN_VIEW)
+  vec4  aabb     = vec4(0);
+  float depthMin = 1;
+  if(!projectCluster(cluster, aabb, depthMin))
+    return;
+#endif
+''',
+'''#if defined(MAIN_VIEW)
+  vec4  aabb     = vec4(0,0,1,1);
+  float depthMin = 0;
+  bool needProjection = (push.minObjectPixels>0);
+#if defined(HIZ)
+  const uint projectionBucketId = cluster.bucketId_commandId >> 16;
+  const bool projectionDynamic =
+      cluster.instanceId!=0xFFFFFFFF &&
+      (bucket[projectionBucketId].flags & (BK_SKIN | BK_MORPH | BK_WATER))!=0;
+  needProjection = needProjection || !projectionDynamic;
+#endif
+#if defined(LARGE)
+  needProjection = true;
+#endif
+  if(needProjection && !projectCluster(cluster, aabb, depthMin))
+    return;
+#endif
 '''
 )
 
@@ -497,7 +537,7 @@ dep_end = ct.index(dep_end_marker, dep_start) + len(dep_end_marker)
 ct = ct[:dep_start] + '    )' + ct[dep_end:]
 cmake.write_text(ct, encoding="utf-8")
 
-print("Direct-folder + upstream meshlets + selective HiZ + triple-buffer FPS/resume instrumentation applied")
+print("Direct-folder + selective HiZ + triple-buffer + dynamic visibility optimization + FPS profiling applied")
 
 # Resume-safe swapchain teardown: presentation may outlive frame fences.
 replace_once(
@@ -522,6 +562,30 @@ replace_once(
 
 replace_once(
     "common/mainwindow.cpp",
+'''    auto& sync = fence[cmdId];
+    if(!sync.wait(0)) {
+      // GPU rendering is not done, pass to next frame
+      std::this_thread::yield();
+      return;
+      }
+''',
+'''    auto& sync = fence[cmdId];
+#if defined(__ANDROID__)
+    static uint32_t gpuFenceBusy = 0;
+#endif
+    if(!sync.wait(0)) {
+      // GPU rendering is not done, pass to next frame
+#if defined(__ANDROID__)
+      ++gpuFenceBusy;
+#endif
+      std::this_thread::yield();
+      return;
+      }
+'''
+)
+
+replace_once(
+    "common/mainwindow.cpp",
 '''    fps.push(t-time);
     if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
 ''',
@@ -531,7 +595,9 @@ replace_once(
     if(t-perfLogAt>=5000) {
       perfLogAt = t;
       Log::i("Runtime FPS: ",fps.get(),", target=",
-             AndroidInput::preferences().fps,", frameLimitMs=",maxFpsInv);
+             AndroidInput::preferences().fps,", frameLimitMs=",maxFpsInv,
+             ", gpuFenceBusy=",gpuFenceBusy);
+      gpuFenceBusy = 0;
       }
 #endif
     if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
