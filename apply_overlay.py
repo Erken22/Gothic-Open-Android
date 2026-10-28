@@ -150,6 +150,11 @@ new_hiz = '''void Renderer::buildHiZ(Tempest::Encoder<Tempest::CommandBuffer>& c
   const bool adreno650 = gpuName!=nullptr && std::strstr(gpuName,"Adreno (TM) 650")!=nullptr;
 
   if(adreno650) {
+    static bool loggedCompat = false;
+    if(!loggedCompat) {
+      loggedCompat = true;
+      Log::i("HiZ: Adreno 650 compatibility mip chain enabled (full HiZ remains active)");
+      }
     // Qualcomm-safe path: one level per dispatch. This keeps the full HiZ
     // pyramid and occlusion culling, but avoids the original cross-workgroup
     // atomic/barrier algorithm that crashes this driver.
