@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'apply_overlay.py'
+      - 'apply_tempest_resume.py'
       - 'overlay/**'
       - '.github/workflows/direct-folder-modern.yml'
   workflow_dispatch:
@@ -82,6 +83,9 @@ jobs:
             -DANDROID_PLATFORM=android-24 \
             -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
             -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$GRADLE"
+
+      - name: Apply Tempest Android resume lifecycle patch
+        run: python3 apply_tempest_resume.py src
 
       - name: Enable AndroidX if generated project needs it
         run: |
