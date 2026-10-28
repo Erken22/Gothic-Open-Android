@@ -1,0 +1,24 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0)      uniform sampler2D         srcMip;
+layout(binding = 1, r16) uniform writeonly image2D dstMip;
+
+void main() {
+  ivec2 dst = ivec2(gl_GlobalInvocationID.xy);
+  ivec2 dstSz = imageSize(dstMip);
+  if(any(greaterThanEqual(dst,dstSz)))
+    return;
+
+  ivec2 srcSz = textureSize(srcMip,0);
+  ivec2 p0 = dst*2;
+  ivec2 p1 = min(p0 + ivec2(1), srcSz - ivec2(1));
+
+  float z00 = texelFetch(srcMip, ivec2(p0.x,p0.y), 0).x;
+  float z01 = texelFetch(srcMip, ivec2(p0.x,p1.y), 0).x;
+  float z10 = texelFetch(srcMip, ivec2(p1.x,p0.y), 0).x;
+  float z11 = texelFetch(srcMip, ivec2(p1.x,p1.y), 0).x;
+
+  imageStore(dstMip, dst, vec4(max(max(z00,z01),max(z10,z11))));
+  }
