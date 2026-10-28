@@ -247,16 +247,17 @@ replace_once("common/utils/installdetect.cpp", old_detect, new_detect)
 # No graphics feature is disabled here; the interface varyings are flattened.
 # Also avoid bindless material descriptors on the old Qualcomm driver.
 # ---------------------------------------------------------------------------
-for old in [
-    'name.find("Adreno")!=std::string_view::npos && name.find("610")!=std::string_view::npos'
-]:
-    new = 'name.find("Adreno")!=std::string_view::npos && (name.find("610")!=std::string_view::npos || name.find("650")!=std::string_view::npos)'
-    # occurs twice in shaders.cpp: bindless and flat varyings.
-    p = root / "common/graphics/shaders.cpp"
-    s = p.read_text(encoding="utf-8")
-    if s.count(old) != 2:
-        raise SystemExit(f"expected two Adreno 610 checks, found {s.count(old)}")
-    p.write_text(s.replace(old, new), encoding="utf-8")
+old = 'name.find("Adreno")!=std::string_view::npos && name.find("610")!=std::string_view::npos'
+flat650 = 'name.find("Adreno")!=std::string_view::npos && (name.find("610")!=std::string_view::npos || name.find("650")!=std::string_view::npos)'
+p = root / "common/graphics/shaders.cpp"
+shader_cpp = p.read_text(encoding="utf-8")
+first = shader_cpp.find(old)
+second = shader_cpp.find(old, first + 1)
+if first < 0 or second < 0 or shader_cpp.find(old, second + 1) >= 0:
+    raise SystemExit("expected exactly two Adreno 610 checks")
+# Keep bindless available on 650; only extend the flat-varying correctness workaround.
+shader_cpp = shader_cpp[:second] + shader_cpp[second:].replace(old, flat650, 1)
+p.write_text(shader_cpp, encoding="utf-8")
 
 # ---------------------------------------------------------------------------
 # Save-name crash: Android IME text is synthetic widget input.
@@ -301,9 +302,10 @@ old_push = '''static void pushKey(uint32_t keyCode, uint32_t code) {
   }
 '''
 new_push = '''static void pushKey(uint32_t keyCode, uint32_t code) {
-  // Android IME input is text editing, not a physical held key. Widgets edit
-  // on key-down and their key-up handler is empty.
+  // Preserve normal key-state transitions for text edits.
+  // Only the editor-action Enter below is intentionally down-only.
   keys.push_back({keyCode,code,true});
+  keys.push_back({keyCode,code,false});
   }
 '''
 replace_once("lib/Tempest/Engine/system/api/androidapi.cpp", old_push, new_push)
@@ -313,12 +315,6 @@ replace_once("lib/Tempest/Engine/system/api/androidapi.cpp", old_push, new_push)
 # R16 quantization plus old Adreno sampling can falsely reject geometry.
 # The pyramid is tiny (<=128x128), so R32F has negligible memory cost.
 # ---------------------------------------------------------------------------
-replace_once(
-    "common/graphics/renderer.cpp",
-    '  hiz.hiZ       = device.image2d(TextureFormat::R16,  hw, hh, true);',
-    '  hiz.hiZ       = device.image2d(TextureFormat::R32F, hw, hh, true);'
-)
-
 old_hiz_box = '''  ibbox[0] = clamp(ibbox[0], ivec2(0), hiZsize - ivec2(1));
   ibbox[1] = clamp(ibbox[1], ivec2(0), hiZsize - ivec2(1));
 
@@ -329,17 +325,233 @@ old_hiz_box = '''  ibbox[0] = clamp(ibbox[0], ivec2(0), hiZsize - ivec2(1));
 '''
 new_hiz_box = '''  // Conservative raster bounds: include one extra HiZ tile around the
   // projected box so rounding cannot hide thin/partial geometry.
-  ibbox[0] = clamp(ibbox[0] - ivec2(1), ivec2(0), hiZsize - ivec2(1));
-  ibbox[1] = clamp(ibbox[1] + ivec2(1), ivec2(0), hiZsize - ivec2(1));
+  ibbox[0] = clamp(ibbox[0] - ivec2(2), ivec2(0), hiZsize - ivec2(1));
+  ibbox[1] = clamp(ibbox[1] + ivec2(2), ivec2(0), hiZsize - ivec2(1));
 
   float bz      = packHiZ(depthMin);
   float z       = hiZFetch(hiZ, ibbox);
   // packHiZ expands the useful depth interval by 20x. A small margin here
   // absorbs ROP/sampler precision differences without disabling occlusion.
-  const float conservativeBias = 0.02;
+  const float conservativeBias = 0.01;
   if(bz > z + conservativeBias)
     return false;
 '''
 replace_once("shader/materials/visibility_pass.comp", old_hiz_box, new_hiz_box)
 
-print("Exact Gothic Launcher 0.6.4 Direct Folder + Save + Adreno650 graphics fixes applied")
+
+# ---------------------------------------------------------------------------
+# FIX13: conservative bounds + Qualcomm-safe HiZ + flat-bindless performance
+# ---------------------------------------------------------------------------
+replace_once(
+    "shader/materials/visibility_pass.comp",
+'''bool projectCluster(const Cluster cluster, out vec4 aabb, out float depthMin) {
+  if(cluster.instanceId==0xFFFFFFFF)
+    return projectSphere(cluster.sphere, aabb, depthMin);
+  // return projectSphere(cluster.sphere, aabb, depthMin);
+  return projectInstance(cluster, aabb, depthMin);
+  }
+''',
+'''bool projectCluster(const Cluster cluster, out vec4 aabb, out float depthMin) {
+  vec4 conservative = cluster.sphere;
+  conservative.w = conservative.w*1.10 + 0.25;
+  return projectSphere(conservative, aabb, depthMin);
+  }
+'''
+)
+
+replace_once(
+    "shader/materials/visibility_pass.comp",
+'''bool frustrumTest(const vec4 sphere) {
+  if(sphere.w<0.f)
+    return false;
+
+  for(int i=0; i<6; ++i) {
+    if(dot(vec4(sphere.xyz,1.0), scene.frustrum[i]) <= -sphere.w) {
+      return false;
+      }
+    }
+
+  return true;
+  }
+''',
+'''bool frustrumTest(const vec4 sphere) {
+  if(sphere.w<0.f)
+    return false;
+
+  const float radius = sphere.w*1.10 + 0.25;
+  for(int i=0; i<6; ++i) {
+    if(dot(vec4(sphere.xyz,1.0), scene.frustrum[i]) <= -radius) {
+      return false;
+      }
+    }
+
+  return true;
+  }
+'''
+)
+
+compat = (Path(__file__).resolve().parent / "overlay" / "hiz_mip_adreno.comp").read_text(encoding="utf-8")
+(root / "shader/hiz/hiz_mip_adreno.comp").write_text(compat, encoding="utf-8")
+
+replace_once(
+    "shader/CMakeLists.txt",
+'''endif()
+add_shader(hiz_pot.comp              hiz/hiz_pot.comp)
+''',
+'''endif()
+add_shader(hiz_mip_adreno.comp       hiz/hiz_mip_adreno.comp)
+add_shader(hiz_pot.comp              hiz/hiz_pot.comp)
+'''
+)
+
+replace_once(
+    "common/graphics/shaders.h",
+    '    Tempest::ComputePipeline hiZPot, hiZMip;\n',
+    '    Tempest::ComputePipeline hiZPot, hiZMip, hiZMipAdreno;\n'
+)
+
+replace_once(
+    "common/graphics/shaders.cpp",
+'''  hiZPot  = computeShader("hiz_pot.comp.sprv");
+  hiZMip  = computeShader("hiz_mip.comp.sprv");
+''',
+'''  hiZPot       = computeShader("hiz_pot.comp.sprv");
+  hiZMip       = computeShader("hiz_mip.comp.sprv");
+  hiZMipAdreno = computeShader("hiz_mip_adreno.comp.sprv");
+'''
+)
+
+old_build_hiz = '''void Renderer::buildHiZ(Tempest::Encoder<Tempest::CommandBuffer>& cmd) {
+  assert(hiz.hiZ.w()<=128 && hiz.hiZ.h()<=128); // shader limitation
+
+  cmd.setDebugMarker("HiZ-mip");
+  cmd.setFramebuffer({});
+  cmd.setBinding(0, zbuffer, Sampler::nearest(ClampMode::ClampToEdge));
+  cmd.setBinding(1, hiz.hiZ);
+  cmd.setPipeline(shaders.hiZPot);
+  cmd.dispatch(size_t(hiz.hiZ.w()), size_t(hiz.hiZ.h()));
+
+  const uint32_t maxBind = 8, mip = hiz.hiZ.mipCount();
+  const auto     wgSz = shaders.hiZMip.workGroupSize();
+  const int      wgW  = std::max(std::max(hiz.hiZ.w()/2, 1) / wgSz.x, 1);
+  const int      wgH  = std::max(std::max(hiz.hiZ.h()/2, 1) / wgSz.y, 1);
+  struct Push {
+    uint32_t numGroups;
+    uint32_t mip;
+    } push = {};
+  push.numGroups = uint32_t(wgW * wgH);
+  push.mip       = mip;
+
+  cmd.setBinding(0, hiz.counter);
+  for(uint32_t i=0; i<maxBind; ++i)
+    cmd.setBinding(1+i, hiz.hiZ, Sampler::nearest(), std::min(i, mip-1));
+  cmd.setPushData(push);
+  cmd.setPipeline(shaders.hiZMip);
+  //cmd.dispatchThreads(std::max(uint32_t(hiz.hiZ.w())/2u, 1u), std::max(uint32_t(hiz.hiZ.h())/2u, 1u));
+  cmd.dispatch(size_t(wgW), size_t(wgH));
+  }
+'''
+new_build_hiz = '''void Renderer::buildHiZ(Tempest::Encoder<Tempest::CommandBuffer>& cmd) {
+  assert(hiz.hiZ.w()<=128 && hiz.hiZ.h()<=128);
+
+  cmd.setDebugMarker("HiZ-mip");
+  cmd.setFramebuffer({});
+  cmd.setBinding(0, zbuffer, Sampler::nearest(ClampMode::ClampToEdge));
+  cmd.setBinding(1, hiz.hiZ);
+  cmd.setPipeline(shaders.hiZPot);
+  cmd.dispatch(size_t(hiz.hiZ.w()), size_t(hiz.hiZ.h()));
+
+  const uint32_t mip = hiz.hiZ.mipCount();
+  const std::string_view gpuName = Resources::device().properties().name;
+  const bool adreno650 = gpuName.find("Adreno")!=std::string_view::npos &&
+                         gpuName.find("650")!=std::string_view::npos;
+  if(adreno650) {
+    static bool logged = false;
+    if(!logged) {
+      logged = true;
+      Log::i("HiZ: Adreno 650 two-pass R16 reducer enabled");
+      }
+
+    struct AdrenoPush { uint32_t levels; } push = {};
+    const auto wg = shaders.hiZMipAdreno.workGroupSize();
+    const int wgW = std::max(std::max(hiz.hiZ.w()/2,1)/wg.x,1);
+    const int wgH = std::max(std::max(hiz.hiZ.h()/2,1)/wg.y,1);
+
+    cmd.setPipeline(shaders.hiZMipAdreno);
+    push.levels = std::min(mip,5u);
+    for(uint32_t i=0; i<5; ++i)
+      cmd.setBinding(i,hiz.hiZ,Sampler::nearest(),std::min(i,mip-1));
+    cmd.setPushData(push);
+    cmd.dispatch(size_t(wgW),size_t(wgH));
+
+    if(mip>5) {
+      constexpr uint32_t base = 4;
+      push.levels = std::min(mip-base,5u);
+      for(uint32_t i=0; i<5; ++i)
+        cmd.setBinding(i,hiz.hiZ,Sampler::nearest(),std::min(base+i,mip-1));
+      cmd.setPushData(push);
+      cmd.dispatch(1,1);
+      }
+    return;
+    }
+
+  const uint32_t maxBind = 8;
+  const auto wgSz = shaders.hiZMip.workGroupSize();
+  const int wgW = std::max(std::max(hiz.hiZ.w()/2,1)/wgSz.x,1);
+  const int wgH = std::max(std::max(hiz.hiZ.h()/2,1)/wgSz.y,1);
+  struct Push { uint32_t numGroups; uint32_t mip; } push = {};
+  push.numGroups = uint32_t(wgW*wgH);
+  push.mip = mip;
+
+  cmd.setBinding(0,hiz.counter);
+  for(uint32_t i=0;i<maxBind;++i)
+    cmd.setBinding(1+i,hiz.hiZ,Sampler::nearest(),std::min(i,mip-1));
+  cmd.setPushData(push);
+  cmd.setPipeline(shaders.hiZMip);
+  cmd.dispatch(size_t(wgW),size_t(wgH));
+  }
+'''
+replace_once("common/graphics/renderer.cpp", old_build_hiz, new_build_hiz)
+
+replace_once(
+    "shader/CMakeLists.txt",
+'''  if(ANDROID)
+    add_shader("${OUTPUT}_flat_slot.vert" materials/main.vert -S vert ${VARS} -DFLAT_VARYINGS)
+  endif()
+''',
+'''  if(ANDROID)
+    add_shader("${OUTPUT}_flat_slot.vert"     materials/main.vert -S vert ${VARS} -DFLAT_VARYINGS)
+    add_shader("${OUTPUT}_flat_bindless.vert" materials/main.vert -S vert ${VARS} -DFLAT_VARYINGS -DBINDLESS)
+  endif()
+'''
+)
+
+replace_once(
+    "shader/CMakeLists.txt",
+'''  if(ANDROID)
+    add_shader("${OUTPUT}_flat_slot.frag" materials/main.frag ${VARS} -DFLAT_VARYINGS)
+  endif()
+''',
+'''  if(ANDROID)
+    add_shader("${OUTPUT}_flat_slot.frag"     materials/main.frag ${VARS} -DFLAT_VARYINGS)
+    add_shader("${OUTPUT}_flat_bindless.frag" materials/main.frag ${VARS} -DFLAT_VARYINGS -DBINDLESS)
+  endif()
+'''
+)
+
+replace_once(
+    "common/graphics/shaders.cpp",
+'''  const bool flatVaryings = needsFlatVaryings && !bl;
+  const char* shaderSuffix = flatVaryings ? "_flat_slot" : (bl ? "_bindless" : "_slot");
+  const char* pfxSuffix = flatVaryings ? "_flat" : "";
+''',
+'''  const bool flatVaryings = needsFlatVaryings;
+  const char* shaderSuffix = flatVaryings
+      ? (bl ? "_flat_bindless" : "_flat_slot")
+      : (bl ? "_bindless" : "_slot");
+  const char* pfxSuffix = flatVaryings ? "_flat" : "";
+'''
+)
+
+print("FIX13: IME typing restored, conservative cluster bounds, two-pass HiZ, flat-bindless Adreno650")
+
