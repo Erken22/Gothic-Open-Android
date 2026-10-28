@@ -66,10 +66,10 @@ replace_once("common/utils/installdetect.cpp", old_detect, new_detect)
 # hiz_mip.comp. That shader builds several mip levels in one dispatch and uses
 # a global atomic counter to make the last workgroup continue the reduction.
 #
-# The compatibility shader produces the same max-depth mip pyramid, but one mip
-# level per dispatch. There is no inter-workgroup synchronization, global
-# counter or coherent multi-mip image array. The rest of the HiZ/occlusion path
-# stays exactly enabled.
+# The compatibility shader produces the same max-depth mip pyramid in two
+# dispatches: mips 1..4 are reduced per workgroup, then one workgroup finishes
+# the top mips. There is no global atomic counter or inter-workgroup
+# synchronization. The rest of the HiZ/occlusion path stays exactly enabled.
 # ---------------------------------------------------------------------------
 
 # Add the compatibility shader to the source tree and shader build.
@@ -153,18 +153,31 @@ new_hiz = '''void Renderer::buildHiZ(Tempest::Encoder<Tempest::CommandBuffer>& c
     static bool loggedCompat = false;
     if(!loggedCompat) {
       loggedCompat = true;
-      Log::i("HiZ: Adreno 650 compatibility mip chain enabled (full HiZ remains active)");
+      Log::i("HiZ: Adreno 650 two-pass compatibility reducer enabled (full HiZ remains active)");
       }
-    // Qualcomm-safe path: one level per dispatch. This keeps the full HiZ
-    // pyramid and occlusion culling, but avoids the original cross-workgroup
-    // atomic/barrier algorithm that crashes this driver.
+
+    // Qualcomm-safe path: preserve the original per-workgroup reduction, but
+    // split off the final cross-workgroup stage. This removes the global
+    // atomic/counter that crashes the driver and avoids one dispatch per mip.
+    struct AdrenoPush { uint32_t levels; } ap = {};
+    const auto awg = shaders.hiZMipAdreno.workGroupSize();
+    const int aw = std::max(std::max(hiz.hiZ.w()/2,1)/awg.x,1);
+    const int ah = std::max(std::max(hiz.hiZ.h()/2,1)/awg.y,1);
+
     cmd.setPipeline(shaders.hiZMipAdreno);
-    for(uint32_t i=1; i<mip; ++i) {
-      const uint32_t w = std::max(1u, uint32_t(hiz.hiZ.w()) >> i);
-      const uint32_t h = std::max(1u, uint32_t(hiz.hiZ.h()) >> i);
-      cmd.setBinding(0, hiz.hiZ, Sampler::nearest(ClampMode::ClampToEdge), i-1);
-      cmd.setBinding(1, hiz.hiZ, Sampler::nearest(ClampMode::ClampToEdge), i);
-      cmd.dispatchThreads(size_t(w), size_t(h));
+    ap.levels = std::min(mip,5u);
+    for(uint32_t i=0; i<5; ++i)
+      cmd.setBinding(i,hiz.hiZ,Sampler::nearest(),std::min(i,mip-1));
+    cmd.setPushData(ap);
+    cmd.dispatch(size_t(aw),size_t(ah));
+
+    if(mip>5) {
+      constexpr uint32_t base = 4;
+      ap.levels = std::min(mip-base,5u);
+      for(uint32_t i=0; i<5; ++i)
+        cmd.setBinding(i,hiz.hiZ,Sampler::nearest(),std::min(base+i,mip-1));
+      cmd.setPushData(ap);
+      cmd.dispatch(1,1);
       }
     return;
     }
@@ -189,6 +202,73 @@ new_hiz = '''void Renderer::buildHiZ(Tempest::Encoder<Tempest::CommandBuffer>& c
   }
 '''
 replace_once("common/graphics/renderer.cpp", old_hiz, new_hiz)
+
+# Mobile defaults in the upstream fork are deliberately very conservative
+# (256 shadow map and 30 FPS). On Adreno 650 this hides shadows and caps a
+# device that can run substantially faster. Keep the user's resolution/effects
+# choices, but use a real shadow map and a 60 FPS cap by default/migration.
+replace_once(
+    "common/utils/androidinput.h",
+    '  int shadows     = 256; // shadow map size, 0 disables shadows\n'
+    '  int effects     = 0;   // SSAO\n'
+    '  int fps         = 30;\n',
+    '  int shadows     = 1024; // shadow map size, 0 disables shadows\n'
+    '  int effects     = 0;    // SSAO (kept optional for performance)\n'
+    '  int fps         = 60;\n'
+)
+
+replace_once(
+    "common/utils/androidinput.cpp",
+    '#include <Tempest/Event>\n',
+    '#include <Tempest/Event>\n#include <Tempest/Log>\n'
+)
+
+replace_once(
+    "common/utils/androidinput.cpp",
+'''    Gothic::settingsSetI(Section,"version",3);
+    Gothic::flushSettings();
+    }
+
+#ifdef __ANDROID__
+''',
+'''    Gothic::settingsSetI(Section,"version",3);
+    Gothic::flushSettings();
+    }
+
+  if(Gothic::settingsGetI(Section,"version")<4) {
+    // Migrate only the old stock mobile defaults; never overwrite values the
+    // player already changed deliberately.
+    if(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingShadows])==256)
+      Gothic::settingsSetI(Section,SettingNames[Mobile::SettingShadows],1024);
+    if(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingFps])==30)
+      Gothic::settingsSetI(Section,SettingNames[Mobile::SettingFps],60);
+    Gothic::settingsSetI(Section,"version",4);
+    Gothic::flushSettings();
+    }
+
+  {
+    const auto p = preferences();
+    Log::i("Mobile profile: resolution=",p.resolution,"%, shadows=",p.shadows,
+           ", effects=",p.effects,", fps=",p.fps);
+  }
+
+#ifdef __ANDROID__
+'''
+)
+
+# Do not discard small shadow casters on a low-resolution mobile shadow map.
+# The full shadow draw list is more important than this tiny culling saving.
+replace_once(
+    "common/graphics/drawcommands.cpp",
+'''    else if(SceneGlobals::isShadowView(viewport)) {
+      push.minObjectPixels = 1.f;
+      const auto& shadow = *scene.shadowMap[viewport-SceneGlobals::V_Shadow0];
+''',
+'''    else if(SceneGlobals::isShadowView(viewport)) {
+      push.minObjectPixels = 0.f;
+      const auto& shadow = *scene.shadowMap[viewport-SceneGlobals::V_Shadow0];
+'''
+)
 
 # The Russian scripts contain a BL target with no function symbol. ZenKit's
 # lenient VM already treats this instruction as skippable. Avoid stopping on
@@ -252,4 +332,4 @@ dep_end = ct.index(dep_end_marker, dep_start) + len(dep_end_marker)
 ct = ct[:dep_start] + '    )' + ct[dep_end:]
 cmake.write_text(ct, encoding="utf-8")
 
-print("Direct-folder + functional Adreno 650 HiZ compatibility overlay applied")
+print("Direct-folder + Adreno 650 HiZ two-pass + full mobile shadows/FPS overlay applied")
