@@ -372,4 +372,111 @@ replace_once("common/graphics/drawcommands.cpp", old_pso, new_pso)
 print("FIX17 0.6.7: Adreno 650 frustum-only visibility fallback applied")
 
 
-# release mirror trigger
+
+# ---------------------------------------------------------------------------
+# FIX19: bundled Turnip on 0.6.7.
+# Turnip gets the normal full HiZ path. If the custom driver cannot load,
+# system Qualcomm automatically stays on the proven FIX17 frustum-only path.
+# ---------------------------------------------------------------------------
+
+replace_once(
+    "common/graphics/drawcommands.cpp",
+    '#include <Tempest/Log>\n#include <string_view>\n',
+    '#include <Tempest/Log>\n#include <string_view>\n#if defined(__ANDROID__)\nextern "C" int opengothic_vulkan_is_turnip();\n#endif\n'
+)
+
+replace_once(
+    "common/graphics/drawcommands.cpp",
+    '''    const bool match = name.find("Adreno")!=std::string_view::npos &&
+                       name.find("650")!=std::string_view::npos;
+    if(match)
+      Log::i("Visibility: Adreno 650 frustum-only fallback enabled; HiZ rejection bypassed");
+''',
+    '''    const bool match = name.find("Adreno")!=std::string_view::npos &&
+                       name.find("650")!=std::string_view::npos &&
+                       opengothic_vulkan_is_turnip()==0;
+    if(match)
+      Log::i("Visibility: system Adreno 650 -> FIX17 frustum-only fallback");
+    else if(name.find("Adreno")!=std::string_view::npos && name.find("650")!=std::string_view::npos)
+      Log::i("Visibility: Turnip Adreno 650 -> full HiZ enabled");
+'''
+)
+
+# Extract native libraries: libadrenotools installs hook libraries from the
+# real nativeLibraryDir and cannot operate on compressed in-APK .so files.
+replace_once(
+    "android/launcher/AndroidManifest.xml",
+    '        android:hasCode="true"\n',
+    '        android:hasCode="true"\n        android:extractNativeLibs="true"\n'
+)
+
+replace_once(
+    "lib/Tempest/Engine/cmake/android/build.gradle.in",
+    '''def extraAssets = assetProperty ? providers.gradleProperty(assetProperty).orNull : null
+''',
+    '''def extraAssets = assetProperty ? providers.gradleProperty(assetProperty).orNull : null
+def nativeSourceRoot = file(@NATIVE_CMAKE@).parentFile
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/cmake/android/build.gradle.in",
+    '''            assets.srcDirs = @ASSET_DIRS@
+            if (extraAssets) {
+''',
+    '''            assets.srcDirs = @ASSET_DIRS@
+            jniLibs.srcDirs += [new File(nativeSourceRoot, "android/turnip/jniLibs")]
+            if (extraAssets) {
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/cmake/android/build.gradle.in",
+    '''    androidResources {
+        noCompress.addAll(@NO_COMPRESS@)
+    }
+''',
+    '''    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+    androidResources {
+        noCompress.addAll(@NO_COMPRESS@)
+    }
+'''
+)
+
+# Define app-local libvulkan.so before Tempest. Tempest's Android Vulkan link
+# resolves to this proxy, which loads Turnip through libadrenotools and falls
+# back to /system/lib64/libvulkan.so if custom loading fails.
+replace_once(
+    "CMakeLists.txt",
+    '''# Tempest
+if(WIN32)
+''',
+    '''# FIX19 Android Vulkan proxy
+if(ANDROID)
+  add_library(vulkan SHARED android/turnip/vulkan_proxy.cpp)
+  target_include_directories(vulkan PRIVATE "$ENV{VULKAN_SDK}/include")
+  target_link_libraries(vulkan PRIVATE dl log)
+  set_target_properties(vulkan PROPERTIES OUTPUT_NAME "vulkan")
+endif()
+
+# Tempest
+if(WIN32)
+'''
+)
+
+replace_once(
+    "CMakeLists.txt",
+    '''target_link_libraries(Gothic2Notr PRIVATE OpenGothic)
+''',
+    '''target_link_libraries(Gothic2Notr PRIVATE OpenGothic)
+if(ANDROID)
+  target_link_libraries(Gothic2Notr PRIVATE vulkan)
+endif()
+'''
+)
+
+print("FIX19 0.6.7: bundled Turnip + full HiZ; system Adreno falls back to FIX17")
