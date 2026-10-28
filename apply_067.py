@@ -483,5 +483,21 @@ replace_once(
 '''
 )
 
+
+# Clang -Werror: keep the Adreno mode probe alive for its one-time diagnostic log.
+replace_once(
+    "common/graphics/drawcommands.cpp",
+    '''    }();
+
+  cmd.setFramebuffer({});
+''',
+    '''    }();
+  (void)adreno650VisibilityFallback;
+
+  cmd.setFramebuffer({});
+'''
+)
+
 print("FIX18 0.6.7: hybrid landscape HiZ + frustum-only instances + Android CMAA2 preset 1")
+
 
