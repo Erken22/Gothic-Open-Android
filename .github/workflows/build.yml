@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   VK_SDK: "1.4.357.0"
@@ -94,11 +94,9 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions OpenGothic-Gothic2-DirectFolder-debug-arm64.apk | tee apk-permissions.txt
           grep -q "android.permission.MANAGE_EXTERNAL_STORAGE" apk-permissions.txt
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v6
-        with:
-          name: OpenGothic-Gothic2-DirectFolder-debug-arm64
-          path: |
-            OpenGothic-Gothic2-DirectFolder-debug-arm64.apk
-            apk-permissions.txt
-          if-no-files-found: error
+      - name: Publish APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete direct-folder-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create direct-folder-latest             OpenGothic-Gothic2-DirectFolder-debug-arm64.apk             apk-permissions.txt             --repo "$GITHUB_REPOSITORY"             --title "OpenGothic Gothic II NotR Direct Folder"             --notes "Debug ARM64 build. Select the installed Gothic II: Night of the Raven folder on Android and run directly from it."             --prerelease
