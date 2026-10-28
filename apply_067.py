@@ -372,4 +372,116 @@ replace_once("common/graphics/drawcommands.cpp", old_pso, new_pso)
 print("FIX17 0.6.7: Adreno 650 frustum-only visibility fallback applied")
 
 
-# release mirror trigger
+
+# ---------------------------------------------------------------------------
+# FIX18: hybrid Adreno 650 visibility + Android CMAA2.
+#
+# Keep FIX17's safety for every instanced object (hero/NPC/vobs): instances
+# never use HiZ rejection. Re-enable the HiZ pipeline only so distant/small
+# landscape clusters can be rejected conservatively. Large on-screen world
+# geometry is also protected from HiZ rejection. This regains some occlusion
+# without returning the object/character breakage seen before FIX17.
+# ---------------------------------------------------------------------------
+
+# Allow pass 0 to build the landscape HiZ pyramid again.
+replace_once(
+    "common/graphics/drawcommands.cpp",
+    '''    if(adreno650VisibilityFallback)
+      return;
+''',
+    '''    // FIX18: keep building HiZ; the shader itself only allows conservative
+    // rejection for small landscape clusters on Adreno 650.
+'''
+)
+
+# Use the HiZ variants again. The shader limits actual rejection on Adreno 650.
+replace_once(
+    "common/graphics/drawcommands.cpp",
+    '''    auto* pso = &Shaders::inst().visibilityPassSh;
+    if(!adreno650VisibilityFallback) {
+      if(viewport==SceneGlobals::V_Main)
+        pso = &Shaders::inst().visibilityPassHiZ;
+      else if(viewport==SceneGlobals::V_HiZ)
+        pso = &Shaders::inst().visibilityPassHiZCr;
+      }
+''',
+    '''    auto* pso = &Shaders::inst().visibilityPassSh;
+    if(viewport==SceneGlobals::V_Main)
+      pso = &Shaders::inst().visibilityPassHiZ;
+    else if(viewport==SceneGlobals::V_HiZ)
+      pso = &Shaders::inst().visibilityPassHiZCr;
+'''
+)
+
+replace_once(
+    "common/graphics/drawcommands.cpp",
+    'Log::i("Visibility: Adreno 650 frustum-only fallback enabled; HiZ rejection bypassed");',
+    'Log::i("Visibility: Adreno 650 hybrid mode enabled; instances frustum-only, conservative landscape HiZ");'
+)
+
+# Conservative HiZ footprint and depth margin.
+replace_once(
+    "shader/materials/visibility_pass.comp",
+    '''  ibbox[0] = clamp(ibbox[0], ivec2(0), hiZsize - ivec2(1));
+  ibbox[1] = clamp(ibbox[1], ivec2(0), hiZsize - ivec2(1));
+
+  float bz      = packHiZ(depthMin);
+  float z       = hiZFetch(hiZ, ibbox);
+  if(bz > z)
+    return false;
+''',
+    '''  ibbox[0] = clamp(ibbox[0] - ivec2(2), ivec2(0), hiZsize - ivec2(1));
+  ibbox[1] = clamp(ibbox[1] + ivec2(2), ivec2(0), hiZsize - ivec2(1));
+
+  float bz      = packHiZ(depthMin);
+  float z       = hiZFetch(hiZ, ibbox);
+  const float conservativeBias = 0.01;
+  if(bz > z + conservativeBias)
+    return false;
+'''
+)
+
+# On Adreno 650 only small landscape clusters can be HiZ-rejected.
+# Every instanced object and large/near world surface stays frustum-only.
+replace_once(
+    "shader/materials/visibility_pass.comp",
+    '''#if defined(HIZ)
+  if(!hiZTest(aabb, depthMin))
+    return;
+#endif
+''',
+    '''#if defined(HIZ)
+  bool allowHiZReject = true;
+#if defined(__ANDROID__)
+  if(cluster.instanceId!=0xFFFFFFFF) {
+    allowHiZReject = false;
+    }
+  else {
+    const vec2 boxPx = max((aabb.zw-aabb.xy)*scene.screenRes, vec2(0));
+    // Never occlusion-reject large nearby world surfaces. Only relatively
+    // small/far landscape clusters are eligible for the driver-sensitive test.
+    if(boxPx.x*boxPx.y >= 8192.0)
+      allowHiZReject = false;
+    }
+#endif
+  if(allowHiZReject && !hiZTest(aabb, depthMin))
+    return;
+#endif
+'''
+)
+
+# CMAA2 is present in 0.6.7 but disabled by default. Preset 1 is the light
+# Android default; PC/default command-line behaviour remains unchanged.
+replace_once(
+    "common/commandline.h",
+    '    uint32_t            aaPresetId = 0;\n',
+    '''#if defined(__ANDROID__)
+    uint32_t            aaPresetId = 1;
+#else
+    uint32_t            aaPresetId = 0;
+#endif
+'''
+)
+
+print("FIX18 0.6.7: hybrid landscape HiZ + frustum-only instances + Android CMAA2 preset 1")
+
