@@ -93,7 +93,15 @@ jobs:
           test -n "$APK"
 
           OUT="GothicLauncher-arm64-Exact064-FIX12-SAVE-HIZ.apk"
-          cp "$APK" "$OUT"
+          base64 -d .ci/gothic_fix2.keystore.b64 > gothic_fix2.keystore
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" aligned-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks gothic_fix2.keystore \
+            --ks-key-alias gothicfix2 \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$OUT" aligned-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
 
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | head -n 15 | tee apk-badging.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$OUT" | tee apk-permissions.txt
