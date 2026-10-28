@@ -232,7 +232,7 @@ src=[head]
 for name in NAMES:
     ret,sig,args=commands[name]
     if name=='vkGetInstanceProcAddr':
-        src.append(r'''extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
+        src.append(r'''extern "C" __attribute__((visibility("default"))) VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
   auto fn=reinterpret_cast<PFN_vkGetInstanceProcAddr>(sym("vkGetInstanceProcAddr"));
   if(!fn) return nullptr;
   if(pName && std::strcmp(pName,"vkGetInstanceProcAddr")==0)
@@ -243,7 +243,7 @@ for name in NAMES:
 ''')
         continue
     if name=='vkGetDeviceProcAddr':
-        src.append(r'''extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, const char* pName) {
+        src.append(r'''extern "C" __attribute__((visibility("default"))) VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, const char* pName) {
   auto fn=reinterpret_cast<PFN_vkGetDeviceProcAddr>(sym("vkGetDeviceProcAddr"));
   if(!fn) return nullptr;
   if(pName && std::strcmp(pName,"vkGetDeviceProcAddr")==0)
@@ -253,7 +253,7 @@ for name in NAMES:
 
 ''')
         continue
-    src.append(f'extern "C" VKAPI_ATTR {ret} VKAPI_CALL {name}({sig}) {{\n')
+    src.append(f'extern "C" __attribute__((visibility("default"))) VKAPI_ATTR {ret} VKAPI_CALL {name}({sig}) {{\n')
     src.append(f'  auto fn=reinterpret_cast<PFN_{name}>(sym("{name}"));\n')
     if ret=='void':
         src.append(f'  if(!fn) return;\n  fn({args});\n}}\n\n')
