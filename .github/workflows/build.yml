@@ -91,7 +91,11 @@ jobs:
 
       - name: Build APK
         run: |
-          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -j 2
+          GRADLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.9/bin/gradle"
+          "$GRADLE" -p src/build/android/OpenGothic-apk \
+            --no-daemon --max-workers=2 \
+            "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8" \
+            assembleRelease
 
       - name: Collect and verify APK
         shell: bash
