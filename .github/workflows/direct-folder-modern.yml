@@ -1,5 +1,5 @@
-name: Build Modern Direct Folder GraphicsFix9
-# workflow revision: graphicsfix9-lazy-acquire-safe-static-lod-miui-resume
+name: Build Modern Direct Folder GraphicsFix10
+# workflow revision: graphicsfix10-resume-drain-present-bindless-diagnostics
 
 on:
   push:
@@ -75,7 +75,7 @@ jobs:
         run: |
           {
             echo '#pragma once'
-            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix9 $GITHUB_SHA\";"
+            echo "static const char* appBuild = \"Direct Folder Adreno650 GraphicsFix10 $GITHUB_SHA\";"
           } > src/game/build.h
 
       - name: Configure Android ARM64
@@ -116,7 +116,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
 
           test -n "$APK"
-          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix9-arm64.apk"
+          OUT="OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix10-arm64.apk"
           cp "$APK" "$OUT"
 
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUT"
@@ -131,9 +131,9 @@ jobs:
         run: |
           gh release delete direct-folder-modern-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           gh release create direct-folder-modern-latest \
-            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix9-arm64.apk \
+            OpenGothic-Gothic2-DirectFolder-Adreno650-GraphicsFix10-arm64.apk \
             apk-permissions.txt apk-badging.txt apk-sha256.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --title "OpenGothic Modern Direct Folder - GraphicsFix9" \
-            --notes "Modern Android fork / ARM64 Release. Performance pass from device CPU timings: lazy swapchain acquire so game tick/UI can overlap display progress, Android prefers MAILBOX/FIFO_RELAXED before FIFO, far static VOBs regain conservative LOD and HiZ while characters/morph/water remain full and non-occluded. Keeps triple buffering. Resume rendering no longer waits for MIUI GAINED_FOCUS; RESUME+NativeWindow is sufficient. Detailed per-stage profiling remains enabled." \
+            --title "OpenGothic Modern Direct Folder - GraphicsFix10" \
+            --notes "Modern Android fork / ARM64 Release. Performance/resume pass from device timings. Keeps stable GraphicsFix9 visibility, adds dynamic projection skip, drains Vulkan before Android surface teardown, keeps lazy acquire/triple buffering and Android MAILBOX preference, clears stale 30 FPS cap, and logs the actual selected present mode/swapchain image count plus descriptor/bindless capabilities. Detailed per-stage profiler remains enabled." \
             --prerelease
