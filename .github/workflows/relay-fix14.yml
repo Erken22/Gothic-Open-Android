@@ -29,7 +29,7 @@ jobs:
         run: |
           FILE="GothicLauncher-arm64-Exact064-FIX14-FRUSTUM-FALLBACK.apk"
           RESP="$(curl --connect-timeout 20 --max-time 240 --fail --silent --show-error \
-            -F "files[]=@$FILE" https://uguu.se/upload.php)"
+            -F "files[]=@$FILE" https://uguu.se/upload)"
           URL="$(printf '%s' "$RESP" | jq -r '.files[0].url // empty')"
           test "$URL" != ""
           echo "FIX14_RELAY_URL=$URL"
