@@ -1,10 +1,13 @@
-name: Build Exact Gothic Launcher 0.6.4 FIX13
+name: Build Exact Gothic Launcher 0.6.4 FIX15
 
 on:
   push:
-    branches: [fix13-exact064-build]
+    branches: [fix15-turnip]
     paths:
       - apply_exact_064.py
+      - overlay/gen_vulkan_proxy.py
+      - ci/prepare_turnip.sh
+      - ci/verify_turnip_apk.sh
       - .github/workflows/build.yml
   workflow_dispatch:
 
@@ -66,6 +69,10 @@ jobs:
           sudo apt-get install -y glslang-tools ninja-build
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platforms;android-35"             "build-tools;35.0.0"             "ndk;27.0.12077973"             "cmake;3.22.1"
 
+      - name: Prepare Turnip and AdrenoTools
+        shell: bash
+        run: bash ci/prepare_turnip.sh
+
       - name: Configure exact launcher ARM64
         shell: bash
         run: |
@@ -92,7 +99,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
           test -n "$APK"
 
-          OUT="GothicLauncher-arm64-Exact064-FIX13-IME-CULL-PERF.apk"
+          OUT="GothicLauncher-arm64-Exact064-FIX15-TURNIP-AUTO.apk"
           base64 -d .ci/gothic_fix2.keystore.b64 > gothic_fix2.keystore
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" aligned-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
@@ -107,19 +114,20 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$OUT" | tee apk-permissions.txt
           grep -q "android.permission.MANAGE_EXTERNAL_STORAGE" apk-permissions.txt
           sha256sum "$OUT" | tee apk-sha256.txt
+          bash ci/verify_turnip_apk.sh "$OUT"
 
           # Keep the largest pre-Gradle-strip libopengothic.so. The Release build
           # intentionally retains -g symbols before APK packaging.
           SYMBOL="$(find src/build/android -type f -name 'libopengothic.so' -printf '%s %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
           test -n "$SYMBOL"
-          cp "$SYMBOL" libopengothic-FIX13-unstripped.so
-          file libopengothic-FIX13-unstripped.so | tee symbols-info.txt
-          sha256sum libopengothic-FIX13-unstripped.so | tee symbols-sha256.txt
+          cp "$SYMBOL" libopengothic-FIX15-unstripped.so
+          file libopengothic-FIX15-unstripped.so | tee symbols-info.txt
+          sha256sum libopengothic-FIX15-unstripped.so | tee symbols-sha256.txt
 
-      - name: Publish FIX13 release
+      - name: Publish FIX15 release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release delete exact-064-fix13 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          gh release create exact-064-fix13             GothicLauncher-arm64-Exact064-FIX13-IME-CULL-PERF.apk             libopengothic-FIX13-unstripped.so             apk-badging.txt apk-permissions.txt apk-sha256.txt             symbols-info.txt symbols-sha256.txt             --repo "$GITHUB_REPOSITORY"             --title "Gothic Launcher 0.6.4 FIX13 — save + Adreno 650 graphics"             --notes "Exact Solessfir/OpenGothic 0.6.4 source (7896a643...) and pinned Tempest (8c7c47fc...). Direct Folder is integrated in source. Adreno 650 keeps flat material varyings while regaining flat+bindless material shaders. Android save-name IME restores normal text key pairs while editor Enter stays down-only. HiZ stays R16 and enabled, uses conservative cluster spheres plus a two-pass no-global-atomic reducer. No scene effect, shadow quality or render resolution is disabled. Unstripped native library is attached for exact future crash symbolication."             --prerelease
+          gh release delete exact-064-fix15 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create exact-064-fix15             GothicLauncher-arm64-Exact064-FIX15-TURNIP-AUTO.apk             libopengothic-FIX15-unstripped.so             apk-badging.txt apk-permissions.txt apk-sha256.txt apk-files.txt needed.txt             symbols-info.txt symbols-sha256.txt             --repo "$GITHUB_REPOSITORY"             --title "Gothic Launcher 0.6.4 FIX15 — Turnip auto"             --notes "Exact OpenGothic 0.6.4 with Direct Folder, save fix and Adreno fixes. Bundles Mesa Turnip 26.3.0-R6 plus libadrenotools. App-local Vulkan proxy tries Turnip first and falls back to system Vulkan. Full HiZ is restored on Turnip; stock Adreno 650 retains FIX14 frustum fallback. APK checks verify driver libraries and libvulkan linkage."             --prerelease
