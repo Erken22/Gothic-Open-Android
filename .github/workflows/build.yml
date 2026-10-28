@@ -85,6 +85,10 @@ jobs:
             -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
             -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$GRADLE"
 
+      - name: Enable AndroidX in generated Gradle project
+        run: |
+          echo "android.useAndroidX=true" >> src/build/android/OpenGothic-apk/gradle.properties
+
       - name: Build APK
         run: |
           "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -j 2
