@@ -77,4 +77,10 @@ for lib in libadrenotools.so libmain_hook.so libfile_redirect_hook.so libgsl_all
 done
 
 ls -lh "$JNI"
+READELF="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+if find "$JNI" -maxdepth 1 -type f -name '*.so' -print0 | xargs -0 -I{} sh -c '"$0" -d "$1" 2>/dev/null | grep -q "libc++_shared.so"' "$READELF" {}; then
+  cp "$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$JNI/libc++_shared.so"
+  echo "Packaged libc++_shared.so for Turnip/adrenotools dependency"
+fi
+
 echo "Turnip/AdrenoTools preparation: PASS"
