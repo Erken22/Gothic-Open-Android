@@ -375,9 +375,9 @@ replace_once(
   // required Android FIFO if the driver does not expose MAILBOX.
   std::initializer_list<VkPresentModeKHR> modes={
     VK_PRESENT_MODE_MAILBOX_KHR,
-    VK_PRESENT_MODE_FIFO_KHR,
     VK_PRESENT_MODE_FIFO_RELAXED_KHR,
     VK_PRESENT_MODE_IMMEDIATE_KHR,
+    VK_PRESENT_MODE_FIFO_KHR,
     };
 #else
   std::initializer_list<VkPresentModeKHR> modes={
@@ -446,4 +446,41 @@ replace_once(
 '''
 )
 
-print("Post-config Tempest immediate TERM release + settled resume patch applied")
+
+# Do not block the CPU at the end of every present waiting for the next
+# swapchain image. Acquire lazily when the next frame actually asks for the
+# backbuffer; game tick/UI work can then overlap display/GPU progress.
+replace_once(
+    "lib/Tempest/Engine/gapi/vulkan/vswapchain.cpp",
+'''uint32_t VSwapchain::currentBackBufferIndex() {
+  return imgIndex;
+  }
+''',
+'''uint32_t VSwapchain::currentBackBufferIndex() {
+  if(imgIndex==uint32_t(-1))
+    acquireNextImage();
+  return imgIndex;
+  }
+'''
+)
+
+replace_once(
+    "lib/Tempest/Engine/gapi/vulkan/vswapchain.cpp",
+'''  //Log::i("vkQueuePresentKHR[",imgIndex,"] = ", tx);
+  Detail::vkAssert(code);
+
+  acquireNextImage();
+  }
+''',
+'''  //Log::i("vkQueuePresentKHR[",imgIndex,"] = ", tx);
+  Detail::vkAssert(code);
+
+  // Acquire on demand in currentBackBufferIndex(). Keeping present() free of
+  // an infinite-timeout vkAcquireNextImageKHR avoids serializing the whole
+  // next CPU frame behind SurfaceFlinger.
+  imgIndex = uint32_t(-1);
+  }
+'''
+)
+
+print("Post-config Tempest lazy-acquire + settled resume patch applied")
