@@ -52,7 +52,7 @@ jobs:
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: "8.9"
+          gradle-version: "8.11"
 
       - name: Install Vulkan headers and Android build tools
         shell: bash
@@ -69,16 +69,16 @@ jobs:
       - name: Configure exact launcher ARM64
         shell: bash
         run: |
-          GRADLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.9/bin/gradle"
+          GRADLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.11/bin/gradle"
           "$ANDROID_HOME/cmake/3.22.1/bin/cmake" -S src -B src/build/android -G Ninja             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.0.12077973/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_PLATFORM=android-24             -DCMAKE_BUILD_TYPE="$BUILD_TYPE"             -DOPENGOTHIC_ANDROID_GAME=launcher             -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$GRADLE"
 
-          echo "android.useAndroidX=true" >> src/build/android/OpenGothic-apk/gradle.properties
+          echo "android.useAndroidX=true" >> src/build/android/android/OpenGothic-apk/gradle.properties
 
       - name: Build release APK
         shell: bash
         run: |
-          GRADLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.9/bin/gradle"
-          "$GRADLE" -p src/build/android/OpenGothic-apk             --no-daemon --max-workers=2             "-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8"             assembleRelease
+          GRADLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.11/bin/gradle"
+          "$GRADLE" -p src/build/android/android/OpenGothic-apk             --no-daemon --max-workers=2             "-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8"             assembleRelease
 
       - name: Collect APK and unstripped native symbols
         shell: bash
