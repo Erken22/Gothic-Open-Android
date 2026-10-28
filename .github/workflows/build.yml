@@ -44,18 +44,13 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Install Vulkan SDK
+      - name: Install Vulkan headers
         shell: bash
         run: |
-          curl -fL "https://sdk.lunarg.com/sdk/download/${VK_SDK}/linux/vulkansdk-linux-x86_64-${VK_SDK}.tar.xz" -o VulkanSDK.tar.xz
-          mkdir -p VulkanSDK
-          tar -xJf VulkanSDK.tar.xz -C VulkanSDK
-          echo "VULKAN_SDK=$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64" >> "$GITHUB_ENV"
-          echo "VK_LAYER_PATH=$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64/etc/vulkan/explicit_layers.d" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64/lib" >> "$GITHUB_ENV"
-          echo "LIBRARY_PATH=$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64/lib/VulkanLoader/lib" >> "$GITHUB_ENV"
-          echo "$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64/bin" >> "$GITHUB_PATH"
-          echo "$GITHUB_WORKSPACE/VulkanSDK/${VK_SDK}/x86_64/Bin" >> "$GITHUB_PATH"
+          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git Vulkan-Headers
+          mkdir -p VulkanSDK/include
+          cp -a Vulkan-Headers/include/vulkan VulkanSDK/include/
+          echo "VULKAN_SDK=$GITHUB_WORKSPACE/VulkanSDK" >> "$GITHUB_ENV"
 
       - name: Install Android build dependencies
         run: |
