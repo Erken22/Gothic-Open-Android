@@ -62,3 +62,18 @@ the bounded top-four count to the container's difference_type. The host
 frame metrics test now uses -Wall -Wextra -Wconversion -Wsign-conversion
 -Werror and passes. Runtime rendering behavior is unaffected by this type
 correction. Replacement build: https://github.com/Erken22/Gothic-Open-Android/actions/runs/40813636509
+
+## Verified publication
+
+- Successful build: https://github.com/Erken22/Gothic-Open-Android/actions/runs/40813636509
+- Source and release tag target: `fb7101908bc5e5d463f933a901508c556465d2b8`.
+- APK: `GothicLauncher-arm64-OpenGothic067-FIX24-TURNIP.apk`, 22,692,727 bytes.
+- SHA256: `a066b3d2cd445d14a1c991547d599c287f1ed94405109025db42c52b16a764b3`.
+- Existing signing certificate, private namespace, cached dispatch marker,
+  CPU/GPU summary markers, old watchdog marker absence and native-map
+  Build-ID checks passed.
+- Further inspection of the supplied FIX23 log finds 70 SurfaceFlinger
+  slow-composition warnings, 58--132 ms, of which 58 occur during the first
+  active-world interval. These are system compositor timings, not direct
+  measurements of game FPS or a particular engine pass.
+- Device FPS gain remains unmeasured pending runtime test.
