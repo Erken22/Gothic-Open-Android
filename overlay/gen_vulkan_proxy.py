@@ -148,8 +148,9 @@ missing=[n for n in NAMES if n not in commands]
 if missing:
     raise SystemExit('Missing commands: '+', '.join(missing))
 
-head=r'''// Generated at build time from Khronos vk.xml.
-// OpenGothic FIX15 app-local Vulkan proxy.
+head=r'''#include "vulkan_redirect.h"
+// Generated at build time from Khronos vk.xml.
+// OpenGothic FIX20 app-local Vulkan proxy.
 // Tries Mesa Turnip via libadrenotools, falls back to Android system Vulkan.
 
 #define VK_USE_PLATFORM_ANDROID_KHR 1
@@ -198,7 +199,7 @@ void initLoader() {
     if(g_loader) {
       g_turnip=true;
       __android_log_print(ANDROID_LOG_INFO,OG_TAG,
-                          "FIX15 Vulkan driver: Mesa Turnip 26.3.0-R6");
+                          "FIX20 Vulkan driver: Mesa Turnip 26.3.0-R6");
       return;
     }
     __android_log_print(ANDROID_LOG_WARN,OG_TAG,
@@ -210,7 +211,7 @@ void initLoader() {
 
   g_loader=dlopen("/system/lib64/libvulkan.so",RTLD_NOW|RTLD_LOCAL);
   if(g_loader)
-    __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX15 Vulkan driver: system Qualcomm fallback");
+    __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX20 Vulkan driver: system Qualcomm fallback");
   else
     __android_log_print(ANDROID_LOG_ERROR,OG_TAG,"unable to open Vulkan loader: %s",dlerror());
 }
@@ -261,5 +262,8 @@ for name in NAMES:
         src.append(f'  if(!fn) return {ret}{{}};\n  return fn({args});\n}}\n\n')
 
 out_path.parent.mkdir(parents=True,exist_ok=True)
+out_path.with_name('vulkan_redirect.h').write_text(
+    '#pragma once\n' + ''.join(f'#define {name} opengothic_{name}\n' for name in NAMES),
+    encoding='utf-8')
 out_path.write_text(''.join(src),encoding='utf-8')
 print(f'generated {len(NAMES)} Vulkan wrappers -> {out_path}')

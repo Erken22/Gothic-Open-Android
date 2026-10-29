@@ -28,17 +28,17 @@ echo "Vulkan proxy syntax check: PASS"
 
 "$NM" -D --defined-only /tmp/libvulkan-proxy.so | tee /tmp/vulkan-proxy-symbols.txt
 for sym in \
-  vkGetInstanceProcAddr \
-  vkGetDeviceProcAddr \
-  vkCreateInstance \
-  vkCreateFence \
-  vkCmdDraw \
-  vkCreateGraphicsPipelines \
+  opengothic_vkGetInstanceProcAddr \
+  opengothic_vkGetDeviceProcAddr \
+  opengothic_vkCreateInstance \
+  opengothic_vkCreateFence \
+  opengothic_vkCmdDraw \
+  opengothic_vkCreateGraphicsPipelines \
   opengothic_vulkan_is_turnip
 do
   grep -Eq "[[:space:]]${sym}$" /tmp/vulkan-proxy-symbols.txt
 done
-VK_EXPORTS="$(awk '$3 ~ /^vk[A-Za-z0-9_]+$/ {n++} END {print n+0}' /tmp/vulkan-proxy-symbols.txt)"
+VK_EXPORTS="$(awk '$3 ~ /^opengothic_vk[A-Za-z0-9_]+$/ {n++} END {print n+0}' /tmp/vulkan-proxy-symbols.txt)"
 test "$VK_EXPORTS" -ge 107
 echo "Vulkan proxy dynamic export check: PASS ($VK_EXPORTS vk exports)"
 

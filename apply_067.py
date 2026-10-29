@@ -374,7 +374,7 @@ print("FIX17 0.6.7: Adreno 650 frustum-only visibility fallback applied")
 
 
 # ---------------------------------------------------------------------------
-# FIX19: bundled Turnip on 0.6.7.
+# FIX20: bundled Turnip on 0.6.7.
 # Turnip gets the normal full HiZ path. If the custom driver cannot load,
 # system Qualcomm automatically stays on the proven FIX17 frustum-only path.
 # ---------------------------------------------------------------------------
@@ -456,13 +456,124 @@ replace_once(
     '''# Tempest
 if(WIN32)
 ''',
-    '''# FIX19 Android Vulkan proxy
+    '''# FIX20 Android Vulkan proxy
 if(ANDROID)
+  # Keep direct Vulkan calls in our private ABI, independent of Android public libvulkan.
+  foreach(og_vk IN ITEMS
+    vkAcquireNextImageKHR
+    vkAllocateCommandBuffers
+    vkAllocateDescriptorSets
+    vkAllocateMemory
+    vkBeginCommandBuffer
+    vkBindBufferMemory
+    vkBindImageMemory
+    vkCmdBeginRenderPass
+    vkCmdBindDescriptorSets
+    vkCmdBindIndexBuffer
+    vkCmdBindPipeline
+    vkCmdBindVertexBuffers
+    vkCmdBlitImage
+    vkCmdClearColorImage
+    vkCmdCopyBuffer
+    vkCmdCopyBufferToImage
+    vkCmdCopyImageToBuffer
+    vkCmdDispatch
+    vkCmdDispatchIndirect
+    vkCmdDraw
+    vkCmdDrawIndexed
+    vkCmdDrawIndirect
+    vkCmdEndRenderPass
+    vkCmdFillBuffer
+    vkCmdPipelineBarrier
+    vkCmdPushConstants
+    vkCmdResetQueryPool
+    vkCmdSetScissor
+    vkCmdSetViewport
+    vkCmdUpdateBuffer
+    vkCmdWriteTimestamp
+    vkCreateAndroidSurfaceKHR
+    vkCreateBuffer
+    vkCreateCommandPool
+    vkCreateComputePipelines
+    vkCreateDescriptorPool
+    vkCreateDescriptorSetLayout
+    vkCreateDevice
+    vkCreateFence
+    vkCreateFramebuffer
+    vkCreateGraphicsPipelines
+    vkCreateImage
+    vkCreateImageView
+    vkCreateInstance
+    vkCreatePipelineLayout
+    vkCreateQueryPool
+    vkCreateRenderPass
+    vkCreateSampler
+    vkCreateSemaphore
+    vkCreateShaderModule
+    vkCreateSwapchainKHR
+    vkDestroyBuffer
+    vkDestroyCommandPool
+    vkDestroyDescriptorPool
+    vkDestroyDescriptorSetLayout
+    vkDestroyDevice
+    vkDestroyFence
+    vkDestroyFramebuffer
+    vkDestroyImage
+    vkDestroyImageView
+    vkDestroyPipeline
+    vkDestroyPipelineLayout
+    vkDestroyQueryPool
+    vkDestroyRenderPass
+    vkDestroySampler
+    vkDestroySemaphore
+    vkDestroyShaderModule
+    vkDestroySurfaceKHR
+    vkDestroySwapchainKHR
+    vkDeviceWaitIdle
+    vkEndCommandBuffer
+    vkEnumerateDeviceExtensionProperties
+    vkEnumerateInstanceExtensionProperties
+    vkEnumerateInstanceLayerProperties
+    vkEnumeratePhysicalDevices
+    vkFlushMappedMemoryRanges
+    vkFreeCommandBuffers
+    vkFreeMemory
+    vkGetBufferMemoryRequirements
+    vkGetDeviceProcAddr
+    vkGetDeviceQueue
+    vkGetFenceStatus
+    vkGetImageMemoryRequirements
+    vkGetInstanceProcAddr
+    vkGetPhysicalDeviceFeatures
+    vkGetPhysicalDeviceFormatProperties
+    vkGetPhysicalDeviceMemoryProperties
+    vkGetPhysicalDeviceProperties
+    vkGetPhysicalDeviceQueueFamilyProperties
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR
+    vkGetPhysicalDeviceSurfaceFormatsKHR
+    vkGetPhysicalDeviceSurfacePresentModesKHR
+    vkGetPhysicalDeviceSurfaceSupportKHR
+    vkGetQueryPoolResults
+    vkGetSwapchainImagesKHR
+    vkInvalidateMappedMemoryRanges
+    vkMapMemory
+    vkQueuePresentKHR
+    vkQueueSubmit
+    vkQueueWaitIdle
+    vkResetCommandBuffer
+    vkResetCommandPool
+    vkResetDescriptorPool
+    vkResetFences
+    vkUnmapMemory
+    vkUpdateDescriptorSets
+    vkWaitForFences)
+    add_compile_definitions("${og_vk}=opengothic_${og_vk}")
+  endforeach()
   add_library(vulkan SHARED android/turnip/vulkan_proxy.cpp)
   target_include_directories(vulkan PRIVATE "$ENV{VULKAN_SDK}/include")
   target_link_libraries(vulkan PRIVATE dl log)
   target_link_options(vulkan PRIVATE "-Wl,--exclude-libs,ALL")
-  set_target_properties(vulkan PROPERTIES OUTPUT_NAME "vulkan"
+  set_target_properties(vulkan PROPERTIES OUTPUT_NAME "opengothic_vulkan"
     CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
 endif()
 
@@ -482,4 +593,4 @@ endif()
 '''
 )
 
-print("FIX19 0.6.7: bundled Turnip + full HiZ; system Adreno falls back to FIX17")
+print("FIX20 0.6.7: bundled Turnip + full HiZ; system Adreno falls back to FIX17")
