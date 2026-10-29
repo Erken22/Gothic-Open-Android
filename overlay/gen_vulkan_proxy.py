@@ -167,6 +167,7 @@ head=r'''#include "vulkan_redirect.h"
 #include <chrono>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <unwind.h>
 
 #define OG_TAG "OpenGothicVk"
 
@@ -183,6 +184,8 @@ struct PendingCall {
   long tid=0;
   const char* name=nullptr;
   void* caller=nullptr;
+  std::array<void*,20> frames{};
+  size_t frameCount=0;
 };
 uint64_t nowMs() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -220,6 +223,16 @@ struct CallWatchdog {
               call.name,call.tid,(unsigned long long)(now-call.start),
               info.dli_fname ? info.dli_fname : "unknown",(unsigned long long)offset,
               (unsigned long long)call.detail0,(unsigned long long)call.detail1);
+          for(size_t j=0;j<call.frameCount;++j) {
+            Dl_info frame{};
+            dladdr(call.frames[j],&frame);
+            const auto pc=reinterpret_cast<uintptr_t>(call.frames[j])-
+                          reinterpret_cast<uintptr_t>(frame.dli_fbase);
+            __android_log_print(ANDROID_LOG_ERROR,OG_TAG,
+                "FIX23 Vulkan wait stack: tid=%ld frame=%zu %s+0x%llx",
+                call.tid,j,frame.dli_fname ? frame.dli_fname : "unknown",
+                (unsigned long long)pc);
+          }
         }
       }
     }).detach();
@@ -239,6 +252,16 @@ struct WatchCall {
       if(call.id) continue;
       id=++state.next;
       call={id,nowMs(),0,detail0,detail1,syscall(SYS_gettid),name,caller};
+      if(std::strcmp(name,"vkWaitForFences")==0) {
+        _Unwind_Backtrace([](_Unwind_Context* context,void* user) {
+          auto& call=*static_cast<PendingCall*>(user);
+          const auto pc=_Unwind_GetIP(context);
+          if(pc==0 || call.frameCount==call.frames.size())
+            return _URC_END_OF_STACK;
+          call.frames[call.frameCount++]=reinterpret_cast<void*>(pc);
+          return _URC_NO_REASON;
+        },&call);
+      }
       break;
     }
   }

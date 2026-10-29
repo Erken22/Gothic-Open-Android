@@ -33,7 +33,7 @@ int main() {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   });
   {
-    WatchCall slow("TEST_slow",(void*)&main,123,456);
+    WatchCall slow("vkWaitForFences",(void*)&main,123,456);
     std::this_thread::sleep_for(std::chrono::milliseconds(4200));
   }
   worker.join();
@@ -44,8 +44,9 @@ int main() {
     subprocess.run(['g++','-std=c++20','-pthread','-I'+str(p/'include'),
                     '-I'+str(headers/'include'),str(src),'-ldl','-o',str(exe)],check=True)
     result=subprocess.run([str(exe)],capture_output=True,text=True,check=True,timeout=10)
-    assert 'FIX22 Vulkan pending: TEST_slow' in result.stderr,result.stderr
-    assert 'FIX22 Vulkan returned: TEST_slow' in result.stderr,result.stderr
+    assert 'FIX22 Vulkan pending: vkWaitForFences' in result.stderr,result.stderr
+    assert 'FIX22 Vulkan returned: vkWaitForFences' in result.stderr,result.stderr
     assert 'detail0=0x7b detail1=0x1c8' in result.stderr,result.stderr
     assert 'TEST_fast' not in result.stderr,result.stderr
+    assert 'FIX23 Vulkan wait stack:' in result.stderr,result.stderr
     print('PASS: slow-call watchdog reports and clears; concurrent short calls stay silent.')
