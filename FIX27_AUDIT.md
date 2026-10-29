@@ -13,3 +13,7 @@ Android shadow markers split ordinary maps into setup, solid, alpha and particle
 Keep prior launch, C++ runtime, private Vulkan ABI, targeted fence, full Turnip HiZ, capability-guarded bindless and VSM/RTSM/mobile-stage guards.
 
 Build/publication and device validation pending.
+
+## Runner allocation blocker
+
+Run40828052739 build source7d758ce8f3013fe288e63af82674301a0f76b3d1 failed before executing steps. Attempt1 job123295552636: runner_id0, steps[], created06:14:49Z/completed06:14:52Z. Retried once through failed-jobs rerun; attempt2 job123361905192 also runner_id0, steps[], created09:17:53Z/completed09:17:56Z. There is no compiler/test result from either run. Job-log download returns404 BlobNotFound. GitHub connector does not expose check-run annotations; browser is signed out and shows404 for this private run. Exact allocation rejection reason is unknown; do not assert a billing/quota issue without annotation evidence. No FIX27 APK was produced. User can inspect the run annotation in their GitHub account; all source and host tests are preserved.
