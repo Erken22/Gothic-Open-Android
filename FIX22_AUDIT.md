@@ -52,3 +52,14 @@ The watchdog never calls the graphics API. Diagnostics use a fixed-size
 - CI builds ARM64, checks APK signature/linkage/build markers, and verifies
   unstripped native symbols have the packaged engine's Build ID.
 - No Android device reproduction or confirmed black-screen repair yet.
+
+## Published build
+
+- Source commit: `34aa4b0742a7bec3125262e8605d7a041ab35dcd`.
+- Successful CI run: https://github.com/Erken22/Gothic-Open-Android/actions/runs/40804485091
+- APK: `GothicLauncher-arm64-OpenGothic067-FIX22-TURNIP.apk`, 22,692,727 bytes.
+- SHA256: `7cab03ba7dc9d25293cca06005892a39645b64e0719e83d588f9deb9c9469a0d`.
+- Signature certificate matches FIX20/FIX21; private ABI and watchdog marker verified.
+- Exact native map Build ID matched the packaged engine in CI and is attached to the release.
+- Additional host forwarding check: both QueueSubmit2 spellings preserve arguments and VkResult; unsupported entry points remain null; registry clears after return.
+- GitHub release uses the inherited default target `main`; use the immutable source commit and workflow above for source provenance, rather than inferring it from the release tag.
