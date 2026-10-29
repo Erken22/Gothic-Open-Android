@@ -48,6 +48,11 @@ int main(){
   assert(Tempest::Log::lines[2].find("layer=1 total-ms=9.5 solid-ms=3 alpha-ms=5 particles-ms=0.5 setup-ms=1")!=std::string::npos);
   assert(Tempest::Log::lines[0].find("total-ms=24.25")!=std::string::npos);
   auto resetTune=[](){AndroidSsaoTuner::states()={};AndroidSsaoTuner::configure(true);};
+  resetTune();
+  AndroidSsaoTuner::observe("SSAO private full",10);assert(AndroidSsaoTuner::useShared(false));
+  AndroidSsaoTuner::observe("SSAO shared full",8);assert(AndroidSsaoTuner::useShared(false));
+  AndroidSsaoTuner::observe("SSAO shared full",8);assert(!AndroidSsaoTuner::useShared(false));
+  AndroidSsaoTuner::observe("SSAO private full",10);assert(!AndroidSsaoTuner::useShared(false)); // ABBA order balances drift.
   resetTune();assert(!AndroidSsaoTuner::useShared(false));
   for(int i=0;i<8;++i){
     AndroidSsaoTuner::observe("SSAO private full",10);assert(AndroidSsaoTuner::useShared(false));
