@@ -27,8 +27,8 @@ namespace Tempest {struct Log {inline static std::vector<std::string> lines;temp
 struct Timing {std::string name;double milliseconds;};
 int main(){
   AndroidFrameMetrics<3> m;
-  for(int i=0;i<8;++i){assert(m.captureGpu(1+uint64_t(i)*2000000));assert(!m.captureGpu(2+uint64_t(i)*2000000));}
-  for(int i=8;i<24;++i){assert(m.captureGpu(14000001+uint64_t(i-7)*10000000));}
+  for(int i=0;i<16;++i){assert(m.captureGpu(1+uint64_t(i)*1000000));assert(!m.captureGpu(2+uint64_t(i)*1000000));}
+  for(int i=16;i<24;++i){assert(m.captureGpu(15000001+uint64_t(i-15)*10000000));}
   assert(!m.captureGpu(1000000000));
   m.skip();m.skip();
   for(uint64_t i=0;i<50;++i){uint64_t b=1+i*40000;m.frame(b,b+1000,b+5000,b+18000,b+20000,b+40000,b+6000,2400,1080);}
@@ -47,6 +47,30 @@ int main(){
   assert(Tempest::Log::lines[1].find("layer=0 total-ms=6.75 solid-ms=2 alpha-ms=4 particles-ms=0.25 setup-ms=0.5")!=std::string::npos);
   assert(Tempest::Log::lines[2].find("layer=1 total-ms=9.5 solid-ms=3 alpha-ms=5 particles-ms=0.5 setup-ms=1")!=std::string::npos);
   assert(Tempest::Log::lines[0].find("total-ms=24.25")!=std::string::npos);
+  auto resetTune=[](){AndroidSsaoTuner::states()={};AndroidSsaoTuner::configure(true);};
+  resetTune();
+  AndroidSsaoTuner::observe("SSAO original full",10);assert(AndroidSsaoTuner::useWave(false));
+  AndroidSsaoTuner::observe("SSAO wave full",8);assert(AndroidSsaoTuner::useWave(false));
+  AndroidSsaoTuner::observe("SSAO wave full",8);assert(!AndroidSsaoTuner::useWave(false));
+  AndroidSsaoTuner::observe("SSAO original full",10);assert(!AndroidSsaoTuner::useWave(false)); // ABBA order balances drift.
+  resetTune();assert(!AndroidSsaoTuner::useWave(false));
+  for(int i=0;i<8;++i){
+    AndroidSsaoTuner::observe("SSAO original full",10);assert(AndroidSsaoTuner::useWave(false));
+    AndroidSsaoTuner::observe("SSAO wave full",8);
+  }
+  assert(AndroidSsaoTuner::states()[0].decided && AndroidSsaoTuner::useWave(false));
+  assert(!AndroidSsaoTuner::useWave(true));
+  AndroidSsaoTuner::observe("SSAO wave full",100);assert(AndroidSsaoTuner::useWave(false));
+  resetTune();for(int i=0;i<8;++i){AndroidSsaoTuner::observe("SSAO original half",10);AndroidSsaoTuner::observe("SSAO wave half",9.6);}
+  assert(!AndroidSsaoTuner::useWave(true)); // <5% improvement retains baseline.
+  resetTune();for(int i=0;i<8;++i){AndroidSsaoTuner::observe("SSAO original full",10);AndroidSsaoTuner::observe("SSAO wave full",i<5?8:11);}
+  assert(!AndroidSsaoTuner::useWave(false)); // Median alone insufficient: need6 paired wins.
+  resetTune();AndroidSsaoTuner::observe("SSAO blur",1);AndroidSsaoTuner::observe("SSAO wave full",0);
+  AndroidSsaoTuner::observe("SSAO wave full",NAN);assert(AndroidSsaoTuner::states()[0].ns==0);
+  AndroidSsaoTuner::observe("SSAO original full",10);assert(AndroidSsaoTuner::useWave(false));
+  AndroidSsaoTuner::finishAll();assert(!AndroidSsaoTuner::useWave(false)); // Partial tests fall back.
+  resetTune();AndroidSsaoTuner::configure(false);AndroidSsaoTuner::observe("SSAO original full",10);
+  assert(!AndroidSsaoTuner::useWave(false) && AndroidSsaoTuner::states()[0].no==0);
   puts("PASS: frame timing units, summary cadence, skipped count, top GPU passes and 24-sample budget.");
 }
 ''')

@@ -203,7 +203,7 @@ struct TurnipAutotune {
       }
     const char* algo=std::getenv("TU_AUTOTUNE_ALGO");
     const char* flags=std::getenv("TU_AUTOTUNE_FLAGS");
-    __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX32 Turnip autotune: algo=%s flags=%s",algo ? algo : "default",flags ? flags : "default");
+    __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX33 Turnip autotune: algo=%s flags=%s",algo ? algo : "default",flags ? flags : "default");
     }
   void restore() {
     if(algoSet) unsetenv("TU_AUTOTUNE_ALGO");
@@ -216,7 +216,7 @@ struct TurnipAutotune {
 };
 
 void initLoader() {
-  __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX32 Vulkan dispatch: cached entry points; call tracing disabled");
+  __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX33 Vulkan dispatch: cached entry points; call tracing disabled");
   const std::string nativeDir=dirOf((void*)&initLoader);
   if(nativeDir.empty()) {
     __android_log_print(ANDROID_LOG_ERROR,OG_TAG,"cannot determine nativeLibraryDir");
