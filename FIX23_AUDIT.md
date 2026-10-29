@@ -57,3 +57,13 @@ Publish exact native symbols and set the release tag's source target explicitly.
 - ARM64 CI checks APK signature, private imports/exports, build markers,
   watchdog markers and native-map Build ID.
 - No claim of device-confirmed black-screen repair until runtime testing.
+
+## Verified publication
+
+- Successful run: https://github.com/Erken22/Gothic-Open-Android/actions/runs/40807594715
+- Built source and release target: `2ba09815cb0c61daef96b35902486ab89b58cfa6`.
+- APK: `GothicLauncher-arm64-OpenGothic067-FIX23-TURNIP.apk`, 22,692,727 bytes.
+- SHA256: `40edc50574bc129a3b8bc4fe7d5f3c02e86fb28f59e5c10c3e5ae0794f1cf612`.
+- Signing certificate matched; linkage, target-wait marker, stack-capture marker, native map Build ID and package checks passed.
+- Additional local concurrency regression passed: timeline mutex stays held while native completion is pending; payload is retained until confirmed completion.
+- Device outcome remains unconfirmed pending user test.
