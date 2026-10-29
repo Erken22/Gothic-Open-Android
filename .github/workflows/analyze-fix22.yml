@@ -1,0 +1,40 @@
+name: Analyze FIX22 native wait
+on:
+  push:
+    branches: [fix22-067-anr-trace]
+    paths: [.github/workflows/analyze-fix22.yml]
+permissions:
+  contents: read
+jobs:
+  symbols:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve exact FIX22 caller
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download exact-067-fix22 --repo "$GITHUB_REPOSITORY" -p FIX22-native-symbols.tar.gz
+          tar -xzf FIX22-native-symbols.tar.gz
+          cat native-build-id.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          symbols=[]
+          for line in Path('native-symbols.txt').read_text().splitlines():
+              parts=line.split(maxsplit=2)
+              if len(parts)!=3: continue
+              try: address=int(parts[0],16)
+              except ValueError: continue
+              symbols.append((address,line))
+          pc=0x18f8bb8
+          before=[x for x in symbols if x[0]<=pc]
+          after=[x for x in symbols if x[0]>pc]
+          print('EXACT_CALLER_BEGIN')
+          for address,line in before[-8:]+after[:8]:
+              print(line)
+          print('EXACT_CALLER_END')
+          print('RELEVANT_SYMBOLS_BEGIN')
+          for address,line in symbols:
+              if any(x in line for x in ['VDevice::wait','VideoWidget::Context::','VideoWidget::paint','VideoWidget::tick','MainWindow::onWorldLoaded']):
+                  print(line)
+          print('RELEVANT_SYMBOLS_END')
+          PY
