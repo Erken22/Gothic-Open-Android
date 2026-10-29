@@ -47,30 +47,29 @@ int main(){
   assert(Tempest::Log::lines[1].find("layer=0 total-ms=6.75 solid-ms=2 alpha-ms=4 particles-ms=0.25 setup-ms=0.5")!=std::string::npos);
   assert(Tempest::Log::lines[2].find("layer=1 total-ms=9.5 solid-ms=3 alpha-ms=5 particles-ms=0.5 setup-ms=1")!=std::string::npos);
   assert(Tempest::Log::lines[0].find("total-ms=24.25")!=std::string::npos);
-  auto resetTune=[](){AndroidSsaoTuner::states()={};AndroidSsaoTuner::configure(true);};
+  auto resetTune=[](){AndroidFogTuner::states()={};AndroidFogTuner::configure(true);};
   resetTune();
-  AndroidSsaoTuner::observe("SSAO private full",10);assert(AndroidSsaoTuner::useShared(false));
-  AndroidSsaoTuner::observe("SSAO shared full",8);assert(AndroidSsaoTuner::useShared(false));
-  AndroidSsaoTuner::observe("SSAO shared full",8);assert(!AndroidSsaoTuner::useShared(false));
-  AndroidSsaoTuner::observe("SSAO private full",10);assert(!AndroidSsaoTuner::useShared(false)); // ABBA order balances drift.
-  resetTune();assert(!AndroidSsaoTuner::useShared(false));
+  AndroidFogTuner::observe("Fog original",10);assert(AndroidFogTuner::useBatched());
+  AndroidFogTuner::observe("Fog batched",8);assert(AndroidFogTuner::useBatched());
+  AndroidFogTuner::observe("Fog batched",8);assert(!AndroidFogTuner::useBatched());
+  AndroidFogTuner::observe("Fog original",10);assert(!AndroidFogTuner::useBatched()); // ABBA order balances drift.
+  resetTune();assert(!AndroidFogTuner::useBatched());
   for(int i=0;i<8;++i){
-    AndroidSsaoTuner::observe("SSAO private full",10);assert(AndroidSsaoTuner::useShared(false));
-    AndroidSsaoTuner::observe("SSAO shared full",8);
+    AndroidFogTuner::observe("Fog original",10);assert(AndroidFogTuner::useBatched());
+    AndroidFogTuner::observe("Fog batched",8);
   }
-  assert(AndroidSsaoTuner::states()[0].decided && AndroidSsaoTuner::useShared(false));
-  assert(!AndroidSsaoTuner::useShared(true));
-  AndroidSsaoTuner::observe("SSAO shared full",100);assert(AndroidSsaoTuner::useShared(false));
-  resetTune();for(int i=0;i<8;++i){AndroidSsaoTuner::observe("SSAO private half",10);AndroidSsaoTuner::observe("SSAO shared half",9.6);}
-  assert(!AndroidSsaoTuner::useShared(true)); // <5% improvement retains baseline.
-  resetTune();for(int i=0;i<8;++i){AndroidSsaoTuner::observe("SSAO private full",10);AndroidSsaoTuner::observe("SSAO shared full",i<5?8:11);}
-  assert(!AndroidSsaoTuner::useShared(false)); // Median alone insufficient: need6 paired wins.
-  resetTune();AndroidSsaoTuner::observe("SSAO blur",1);AndroidSsaoTuner::observe("SSAO shared full",0);
-  AndroidSsaoTuner::observe("SSAO shared full",NAN);assert(AndroidSsaoTuner::states()[0].ns==0);
-  AndroidSsaoTuner::observe("SSAO private full",10);assert(AndroidSsaoTuner::useShared(false));
-  AndroidSsaoTuner::finishAll();assert(!AndroidSsaoTuner::useShared(false)); // Partial tests fall back.
-  resetTune();AndroidSsaoTuner::configure(false);AndroidSsaoTuner::observe("SSAO private full",10);
-  assert(!AndroidSsaoTuner::useShared(false) && AndroidSsaoTuner::states()[0].no==0);
+  assert(AndroidFogTuner::states()[0].decided && AndroidFogTuner::useBatched());
+  AndroidFogTuner::observe("Fog batched",100);assert(AndroidFogTuner::useBatched());
+  resetTune();for(int i=0;i<8;++i){AndroidFogTuner::observe("Fog original",10);AndroidFogTuner::observe("Fog batched",9.6);}
+  assert(!AndroidFogTuner::useBatched()); // <5% improvement retains baseline.
+  resetTune();for(int i=0;i<8;++i){AndroidFogTuner::observe("Fog original",10);AndroidFogTuner::observe("Fog batched",i<5?8:11);}
+  assert(!AndroidFogTuner::useBatched()); // Median alone insufficient: need6 paired wins.
+  resetTune();AndroidFogTuner::observe("SSAO blur",1);AndroidFogTuner::observe("Fog batched",0);
+  AndroidFogTuner::observe("Fog batched",NAN);assert(AndroidFogTuner::states()[0].ns==0);
+  AndroidFogTuner::observe("Fog original",10);assert(AndroidFogTuner::useBatched());
+  AndroidFogTuner::finishAll();assert(!AndroidFogTuner::useBatched()); // Partial tests fall back.
+  resetTune();AndroidFogTuner::configure(false);AndroidFogTuner::observe("Fog original",10);
+  assert(!AndroidFogTuner::useBatched() && AndroidFogTuner::states()[0].no==0);
   puts("PASS: frame timing units, summary cadence, skipped count, top GPU passes and 24-sample budget.");
 }
 ''')
