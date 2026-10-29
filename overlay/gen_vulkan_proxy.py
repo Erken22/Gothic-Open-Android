@@ -161,6 +161,11 @@ head=r'''#include "vulkan_redirect.h"
 #include <string>
 #include <cstring>
 #include <cstdlib>
+#include <array>
+#include <thread>
+#include <chrono>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 #define OG_TAG "OpenGothicVk"
 
@@ -169,6 +174,86 @@ using OpenVk = void*(*)(int,int,const char*,const char*,const char*,const char*,
 std::once_flag g_once;
 void* g_loader=nullptr;
 bool g_turnip=false;
+
+// Keep this process-lifetime state alive while detached diagnostics run.
+// Never change Vulkan timeouts or synthesize a successful completion.
+struct PendingCall {
+  uint64_t id=0, start=0, reported=0, detail0=0, detail1=0;
+  long tid=0;
+  const char* name=nullptr;
+  void* caller=nullptr;
+};
+uint64_t nowMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+struct CallWatchdog {
+  std::mutex mutex;
+  std::array<PendingCall,64> calls{};
+  uint64_t next=0;
+  CallWatchdog() {
+    std::thread([this] {
+      for(;;) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::array<PendingCall,64> overdue{};
+        size_t count=0;
+        const auto now=nowMs();
+        {
+          std::lock_guard<std::mutex> lock(mutex);
+          for(auto& call:calls) {
+            if(call.id && now-call.start>=3000 &&
+               (!call.reported || now-call.reported>=5000)) {
+              call.reported=now;
+              overdue[count++]=call;
+            }
+          }
+        }
+        for(size_t i=0;i<count;++i) {
+          const auto& call=overdue[i];
+          Dl_info info{};
+          dladdr(call.caller,&info);
+          const auto offset=reinterpret_cast<uintptr_t>(call.caller)-
+                            reinterpret_cast<uintptr_t>(info.dli_fbase);
+          __android_log_print(ANDROID_LOG_ERROR,OG_TAG,
+              "FIX22 Vulkan pending: %s tid=%ld elapsed=%llums caller=%s+0x%llx detail0=0x%llx detail1=0x%llx",
+              call.name,call.tid,(unsigned long long)(now-call.start),
+              info.dli_fname ? info.dli_fname : "unknown",(unsigned long long)offset,
+              (unsigned long long)call.detail0,(unsigned long long)call.detail1);
+        }
+      }
+    }).detach();
+  }
+};
+CallWatchdog& watchdog() {
+  static auto* value=new CallWatchdog;
+  return *value;
+}
+struct WatchCall {
+  CallWatchdog& state;
+  uint64_t id=0;
+  WatchCall(const char* name,void* caller,uint64_t detail0=0,uint64_t detail1=0)
+    :state(watchdog()) {
+    std::lock_guard<std::mutex> lock(state.mutex);
+    for(auto& call:state.calls) {
+      if(call.id) continue;
+      id=++state.next;
+      call={id,nowMs(),0,detail0,detail1,syscall(SYS_gettid),name,caller};
+      break;
+    }
+  }
+  ~WatchCall() {
+    std::lock_guard<std::mutex> lock(state.mutex);
+    for(auto& call:state.calls) {
+      if(!id || call.id!=id) continue;
+      if(call.reported)
+        __android_log_print(ANDROID_LOG_ERROR,OG_TAG,
+            "FIX22 Vulkan returned: %s tid=%ld elapsed=%llums",call.name,call.tid,
+            (unsigned long long)(nowMs()-call.start));
+      call={};
+      break;
+    }
+  }
+};
 
 std::string dirOf(void* p) {
   Dl_info info{};
@@ -256,6 +341,15 @@ for name in NAMES:
         continue
     src.append(f'extern "C" __attribute__((visibility("default"))) VKAPI_ATTR {ret} VKAPI_CALL {name}({sig}) {{\n')
     src.append(f'  auto fn=reinterpret_cast<PFN_{name}>(sym("{name}"));\n')
+    if name in {'vkAcquireNextImageKHR','vkDeviceWaitIdle','vkQueueWaitIdle',
+                'vkWaitForFences','vkQueuePresentKHR','vkQueueSubmit',
+                'vkCreateGraphicsPipelines','vkCreateComputePipelines'}:
+        details = {
+            'vkAcquireNextImageKHR': 'timeout,0',
+            'vkWaitForFences': 'fenceCount,timeout',
+            'vkQueueSubmit': 'submitCount,0',
+        }.get(name,'0,0')
+        src.append(f'  WatchCall watch("{name}",__builtin_return_address(0),{details});\n')
     if ret=='void':
         src.append(f'  if(!fn) return;\n  fn({args});\n}}\n\n')
     else:
@@ -267,3 +361,4 @@ out_path.with_name('vulkan_redirect.h').write_text(
     encoding='utf-8')
 out_path.write_text(''.join(src),encoding='utf-8')
 print(f'generated {len(NAMES)} Vulkan wrappers -> {out_path}')
+

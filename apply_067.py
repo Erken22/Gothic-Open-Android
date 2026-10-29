@@ -626,3 +626,18 @@ replace_once(
 '''
 )
 print("FIX21: ordinary Android shadows preserve quality; unused VSM pipelines are not created")
+
+# FIX22 diagnostics: delimit world finalization without changing synchronization.
+replace_once('common/gothic.cpp',
+    '        pendingGame = std::move(next);',
+    '        Log::i("FIX22 load: worker finished world construction");\n        pendingGame = std::move(next);')
+replace_once('common/mainwindow.cpp',
+    'void MainWindow::onWorldLoaded() {',
+    'void MainWindow::onWorldLoaded() {\n  Log::i("FIX22 load: main-thread finalization entered");')
+replace_once('common/mainwindow.cpp',
+    '  device.waitIdle();\n  time.step("finish/reset-input-and-gpu-wait");',
+    '  Log::i("FIX22 load: before device.waitIdle");\n  device.waitIdle();\n  Log::i("FIX22 load: after device.waitIdle");\n  time.step("finish/reset-input-and-gpu-wait");')
+replace_once('common/mainwindow.cpp',
+    '  renderer.onWorldChanged();\n  time.step("finish/command-buffers-and-renderer-reset");',
+    '  Log::i("FIX22 load: before renderer.onWorldChanged");\n  renderer.onWorldChanged();\n  Log::i("FIX22 load: renderer world reset complete");\n  time.step("finish/command-buffers-and-renderer-reset");')
+print('FIX22: pending Vulkan call watchdog and world-finalization diagnostics; rendering unchanged')
