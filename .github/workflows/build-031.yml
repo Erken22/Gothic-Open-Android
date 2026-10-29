@@ -1,17 +1,17 @@
-name: Build OpenGothic 0.6.7 FIX30 Turnip
+name: Build OpenGothic 0.6.7 FIX31 Turnip
 
 on:
   push:
-    branches: [fix30-067-fog-batching]
+    branches: [fix31-067-render-audit]
     paths:
       - apply_067.py
       - ci/prepare_turnip.sh
       - overlay/gen_vulkan_proxy.py
-      - .github/workflows/build-030.yml
+      - .github/workflows/build-031.yml
   workflow_dispatch:
 
 concurrency:
-  group: opengothic-067-fix30-fog-batching
+  group: opengothic-067-fix31-render-audit
   cancel-in-progress: true
 
 permissions:
@@ -38,7 +38,7 @@ jobs:
           git submodule update --init --recursive
           test "$(git rev-parse HEAD)" = "$OPENGOTHIC_COMMIT"
 
-      - name: Apply FIX30
+      - name: Apply FIX31
         run: python3 apply_067.py src
 
       - uses: actions/setup-java@v5
@@ -70,24 +70,18 @@ jobs:
           python3 ci/test_turnip_materials.py
           python3 ci/test_turnip_autotune.py Vulkan-Headers
           python3 ci/test_depth_layout.py src Vulkan-Headers
-          python3 ci/test_fog_batching.py src
-          for mode in original batched; do
-            SOURCE=src/shader/sky/fog.frag
-            if [ "$mode" = batched ]; then SOURCE=src/shader/sky/fog_batched.frag; fi
-            glslangValidator -V -Isrc/shader -Isrc/shader/sky -S comp -DVOLUMETRIC "$SOURCE" -o "/tmp/fog-$mode.spv"
-            spirv-val "/tmp/fog-$mode.spv"
-          done
+          python3 ci/test_render_audit.py src Vulkan-Headers
 
       - name: Prepare Turnip and Vulkan proxy
         shell: bash
         run: bash ci/prepare_turnip.sh
 
-      - name: Generate FIX30 build ID
+      - name: Generate FIX31 build ID
         shell: bash
         run: |
           {
             echo '#pragma once'
-            echo 'static const char* appBuild = "OpenGothic 0.6.7 FIX30 Turnip";'
+            echo 'static const char* appBuild = "OpenGothic 0.6.7 FIX31 Turnip";'
           } > src/game/build.h
 
       - name: Configure Android ARM64
@@ -101,7 +95,7 @@ jobs:
         run: |
           "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -- -j2
 
-      - name: Sign and verify FIX30
+      - name: Sign and verify FIX31
         shell: bash
         run: |
           APK=""
@@ -113,7 +107,7 @@ jobs:
           done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
           test -n "$APK"
 
-          OUT="GothicLauncher-arm64-OpenGothic067-FIX30-TURNIP.apk"
+          OUT="GothicLauncher-arm64-OpenGothic067-FIX31-TURNIP.apk"
           base64 -d .ci/gothic_fix2.keystore.b64 > gothic_fix2.keystore
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" aligned-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks gothic_fix2.keystore             --ks-key-alias gothicfix2             --ks-pass pass:android             --key-pass pass:android             --out "$OUT" aligned-unsigned.apk
@@ -152,13 +146,13 @@ jobs:
             exit 1
           fi
 
-          strings packaged-libopengothic.so | grep -F "OpenGothic 0.6.7 FIX30 Turnip"
+          strings packaged-libopengothic.so | grep -F "OpenGothic 0.6.7 FIX31 Turnip"
           strings packaged-libopengothic.so | grep -F "FIX23 fence waits: Turnip Adreno 650 uses targeted native completion"
           strings packaged-libopengothic.so | grep -F "Shadow startup: standard shadow maps; unrequested virtual shadow pipelines skipped"
-          strings packaged-libopengothic.so | grep -F "FIX30 material mode:"
-          strings packaged-libopengothic.so | grep -F "FIX30 shadow: layer="
+          strings packaged-libopengothic.so | grep -F "FIX31 material mode:"
+          strings packaged-libopengothic.so | grep -F "FIX31 shadow: layer="
           sha256sum "$OUT" | tee apk-sha256.txt
-          echo "FIX30 Turnip packaging/linkage verification: PASS"
+          echo "FIX31 Turnip packaging/linkage verification: PASS"
 
       - name: Preserve exact native symbols
         shell: bash
@@ -171,21 +165,21 @@ jobs:
           test "$(sed -n 's/.*Build ID: //p' native-build-id.txt)" = "$(sed -n 's/.*Build ID: //p' packaged-build-id.txt)"
           "$LLVM/llvm-nm" -n -C "$ELF" > native-symbols.txt
           grep -q 'MainWindow::onWorldLoaded' native-symbols.txt
-          tar -czf FIX30-native-symbols.tar.gz native-symbols.txt native-build-id.txt packaged-build-id.txt
-          strings packaged-libopengothic_vulkan.so | grep -F 'FIX30 Vulkan dispatch: cached entry points; call tracing disabled'
-          strings packaged-libopengothic_vulkan.so | grep -F 'FIX30 Turnip autotune: algo=%s flags=%s'
-          strings packaged-libopengothic.so | grep -F 'FIX30 frame:'
-          strings packaged-libopengothic.so | grep -F 'FIX30 GPU sample:'
+          tar -czf FIX31-native-symbols.tar.gz native-symbols.txt native-build-id.txt packaged-build-id.txt
+          strings packaged-libopengothic_vulkan.so | grep -F 'FIX31 Vulkan dispatch: cached entry points; call tracing disabled'
+          strings packaged-libopengothic_vulkan.so | grep -F 'FIX31 Turnip autotune: algo=%s flags=%s'
+          strings packaged-libopengothic.so | grep -F 'FIX31 frame:'
+          strings packaged-libopengothic.so | grep -F 'FIX31 GPU sample:'
           ! strings packaged-libopengothic_vulkan.so | grep -F 'Vulkan wait stack:'
           ! strings packaged-libopengothic_vulkan.so | grep -F 'Vulkan pending:'
 
-      - name: Upload verified FIX30 artifact
+      - name: Upload verified FIX31 artifact
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: OpenGothic-FIX30-verified
+          name: OpenGothic-FIX31-verified
           path: |
-            GothicLauncher-arm64-OpenGothic067-FIX30-TURNIP.apk
+            GothicLauncher-arm64-OpenGothic067-FIX31-TURNIP.apk
             apk-sha256.txt
             apk-signature.txt
             apk-badging.txt
@@ -197,7 +191,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: FIX30-linkage-diagnostics
+          name: FIX31-linkage-diagnostics
           path: |
             packaged-libopengothic.so
             packaged-libopengothic_vulkan.so
@@ -213,5 +207,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release delete exact-067-fix30 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          gh release create exact-067-fix30             GothicLauncher-arm64-OpenGothic067-FIX30-TURNIP.apk             apk-badging.txt apk-sha256.txt apk-signature.txt needed.txt vulkan-exports.txt FIX30-native-symbols.tar.gz             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "OpenGothic 0.6.7 FIX30 — measured fog batching"             --notes "Keep proven FIX28 Turnip profiled/tune_small policy and original SSAO. Remove rejected FIX29 SSAO storage experiment. Compare original fog occlusion 8x16 against separately compiled batched-four 8x8 variant on Turnip Adreno 650. Same 32 shadow samples, sampling math, bounds behavior, resolution and output mask. Eight counterbalanced GPU pairs choose candidate only with >5% median gain and at least six wins; otherwise retain original. Original source and VSM paths unchanged. Native build, signature and host tests verify packaging and contracts; performance and visuals require phone validation."             --prerelease
+          gh release delete exact-067-fix31 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create exact-067-fix31             GothicLauncher-arm64-OpenGothic067-FIX31-TURNIP.apk             apk-badging.txt apk-sha256.txt apk-signature.txt needed.txt vulkan-exports.txt FIX31-native-symbols.tar.gz             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "OpenGothic 0.6.7 FIX31 — renderer diagnostics"             --notes "Diagnostic build, no FPS gain claimed. Preserve FIX28 rendering, material batching and profiled Turnip policy. Remove rejected FIX29/FIX30 shader experiments. Capability-gated VK_KHR_pipeline_executable_properties collects compile-time SSAO/fog statistics at startup when available. Four existing timestamp sample command buffers log pass/command counts, broad stage barriers and nominal attachment load/store bytes. No new GPU query pools or waits, no indirect-buffer readback. Nominal bytes are not physical DDR traffic; compiler statistics are not live GPU utilization. Use logs to choose a larger renderer optimization."             --prerelease
