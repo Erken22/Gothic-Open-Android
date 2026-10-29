@@ -61,6 +61,11 @@ jobs:
           sudo apt-get install -y glslang-tools ninja-build
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platforms;android-35"             "build-tools;35.0.0"             "ndk;27.0.12077973"             "cmake;3.22.1"
 
+      - name: Verify private Vulkan loader and watchdog
+        run: |
+          python3 ci/test_vulkan_namespace.py Vulkan-Headers
+          python3 ci/test_vulkan_watchdog.py Vulkan-Headers
+
       - name: Prepare Turnip and Vulkan proxy
         shell: bash
         run: bash ci/prepare_turnip.sh

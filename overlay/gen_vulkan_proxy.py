@@ -162,6 +162,7 @@ head=r'''#include "vulkan_redirect.h"
 #include <cstring>
 #include <cstdlib>
 #include <array>
+#include <atomic>
 #include <thread>
 #include <chrono>
 #include <sys/syscall.h>
@@ -254,6 +255,12 @@ struct WatchCall {
     }
   }
 };
+std::atomic<PFN_vkQueueSubmit2> g_submit2{nullptr};
+VkResult VKAPI_CALL observedQueueSubmit2(VkQueue queue,uint32_t count,
+                                        const VkSubmitInfo2* submits,VkFence fence) {
+  WatchCall watch("vkQueueSubmit2[KHR]",__builtin_return_address(0),count,0);
+  return g_submit2.load()(queue,count,submits,fence);
+}
 
 std::string dirOf(void* p) {
   Dl_info info{};
@@ -334,7 +341,13 @@ for name in NAMES:
   if(!fn) return nullptr;
   if(pName && std::strcmp(pName,"vkGetDeviceProcAddr")==0)
     return reinterpret_cast<PFN_vkVoidFunction>(&vkGetDeviceProcAddr);
-  return fn(device,pName);
+  auto result=fn(device,pName);
+  if(result && pName && (std::strcmp(pName,"vkQueueSubmit2KHR")==0 ||
+                        std::strcmp(pName,"vkQueueSubmit2")==0)) {
+    g_submit2.store(reinterpret_cast<PFN_vkQueueSubmit2>(result));
+    return reinterpret_cast<PFN_vkVoidFunction>(&observedQueueSubmit2);
+  }
+  return result;
 }
 
 ''')
