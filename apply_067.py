@@ -682,19 +682,21 @@ replace_once('common/graphics/worldview.cpp', '  visuals.drawShadow(cmd,layer);\
 # FIX29: match the layout used by both dynamic and fallback depth attachments.
 replace_once('lib/Tempest/Engine/gapi/vulkan/vcommandbuffer.cpp', '  if(rs==ResourceLayout::DepthAttach)\n    return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;', '  if(rs==ResourceLayout::DepthAttach)\n    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;')
 
-replace_once('shader/CMakeLists.txt', 'add_shader(ssao.comp                 ssao/ssao.comp)', 'add_shader(ssao_shared.comp          ssao/ssao.comp -DSSAO_SHARED_BINS)\nadd_shader(ssao_half_shared.comp     ssao/ssao.comp -DSSAO_SHARED_BINS -DSSAO_HALF_RES)\nadd_shader(ssao.comp                 ssao/ssao.comp)')
+replace_once('shader/CMakeLists.txt', 'add_shader(ssao.comp                 ssao/ssao.comp)', 'add_shader(ssao_shared.comp          ssao/ssao_shared.comp -DSSAO_SHARED_BINS)\nadd_shader(ssao_half_shared.comp     ssao/ssao_shared.comp -DSSAO_SHARED_BINS -DSSAO_HALF_RES)\nadd_shader(ssao.comp                 ssao/ssao.comp)')
 
-replace_once('shader/ssao/ssao.comp', 'float hitV[gridQSize];', '#ifdef SSAO_SHARED_BINS\n// Each invocation owns one column; no inter-invocation sharing or new barrier.\nshared float hitVShared[gridQSize][64];\nfloat readHit(uint bin) {return hitVShared[bin][gl_LocalInvocationIndex];}\nvoid writeHit(uint bin,float value) {hitVShared[bin][gl_LocalInvocationIndex]=value;}\n#else\nfloat hitV[gridQSize];\nfloat readHit(uint bin) {return hitV[bin];}\nvoid writeHit(uint bin,float value) {hitV[bin]=value;}\n#endif')
+# Preserve the baseline SSAO source byte-for-byte; specialize a separate candidate.
+(root / "shader/ssao/ssao_shared.comp").write_text((root / "shader/ssao/ssao.comp").read_text(encoding="utf-8"), encoding="utf-8")
+replace_once('shader/ssao/ssao_shared.comp', 'float hitV[gridQSize];', '#ifdef SSAO_SHARED_BINS\n// Each invocation owns one column; no inter-invocation sharing or new barrier.\nshared float hitVShared[gridQSize][64];\nfloat readHit(uint bin) {return hitVShared[bin][gl_LocalInvocationIndex];}\nvoid writeHit(uint bin,float value) {hitVShared[bin][gl_LocalInvocationIndex]=value;}\n#else\nfloat hitV[gridQSize];\nfloat readHit(uint bin) {return hitV[bin];}\nvoid writeHit(uint bin,float value) {hitV[bin]=value;}\n#endif')
 
-replace_once('shader/ssao/ssao.comp', '  uint uv = pyramidId(dir);\n\n  hits', '  uint uv = pyramidId(dir);\n  // Zero/degenerate directions must not address outside a bin array.\n  if(uv>=uint(gridQSize)) return;\n\n  hits')
+replace_once('shader/ssao/ssao_shared.comp', '  uint uv = pyramidId(dir);\n\n  hits', '  uint uv = pyramidId(dir);\n  // Zero/degenerate directions must not address outside a bin array.\n  if(uv>=uint(gridQSize)) return;\n\n  hits')
 
-replace_once('shader/ssao/ssao.comp', '  uint uv = pyramidId(dir);\n  anySmp', '  uint uv = pyramidId(dir);\n  if(uv>=uint(gridQSize)) return;\n  anySmp')
+replace_once('shader/ssao/ssao_shared.comp', '  uint uv = pyramidId(dir);\n  anySmp', '  uint uv = pyramidId(dir);\n  if(uv>=uint(gridQSize)) return;\n  anySmp')
 
-replace_once('shader/ssao/ssao.comp', '  float value   = hitV[uv];', '  float value   = readHit(uv);')
+replace_once('shader/ssao/ssao_shared.comp', '  float value   = hitV[uv];', '  float value   = readHit(uv);')
 
-replace_once('shader/ssao/ssao.comp', '  hitV[uv] = max(value, v);', '  writeHit(uv,max(value, v));')
+replace_once('shader/ssao/ssao_shared.comp', '  hitV[uv] = max(value, v);', '  writeHit(uv,max(value, v));')
 
-replace_once('shader/ssao/ssao.comp', '    hitV[i] = 0;', '    writeHit(uint(i),0);')
+replace_once('shader/ssao/ssao_shared.comp', '    hitV[i] = 0;', '    writeHit(uint(i),0);')
 
 replace_once('common/graphics/shaders.h', '    Tempest::ComputePipeline ssao, ssaoBlur, ssaoHalf, ssaoUpsample;', '    Tempest::ComputePipeline ssao, ssaoBlur, ssaoHalf, ssaoUpsample;\n    Tempest::ComputePipeline ssaoShared, ssaoHalfShared;')
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Run real patched bin helpers with interleaved invocations against private-bin reference."""
 import pathlib,subprocess,sys,tempfile
-root=pathlib.Path(sys.argv[1]);s=(root/'shader/ssao/ssao.comp').read_text()
+root=pathlib.Path(sys.argv[1]);s=(root/'shader/ssao/ssao_shared.comp').read_text()
+original=(root/'shader/ssao/ssao.comp').read_text()
 a=s.index('uint  hits   =');b=s.index('shared uint shMaxSteps;',a);block=s[a:b]
+x=original.index('uint  hits   =');y=original.index('shared uint shMaxSteps;',x);originalBlock=original[x:y]
 assert s.count('barrier();')==2
 for literal in ['const uint  numSamples     = 32;','const uint  numIter        = 8;','const float sphereLen      = 100;','layout(local_size_x = 8, local_size_y = 8) in;']:
  assert literal in s
@@ -21,7 +23,7 @@ uint pyramidId(vec3 dir){return dir.bin;}
 #define shared
 '''
 # Compile identical real bin arithmetic twice, with only the storage qualifier changed.
-code=stub+'namespace Private {float occlusionAll=0;\n'+block+'}\n'
+code=stub+'namespace Private {float occlusionAll=0;\n'+originalBlock+'}\n'
 code+='#define SSAO_SHARED_BINS\nnamespace Shared {uint gl_LocalInvocationIndex=0;float occlusionAll=0;\n'+block+'}\n'
 main=r'''
 struct State {float occlusion=0;uint hits=0,any=0;std::array<float,25> bins{};};

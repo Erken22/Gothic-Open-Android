@@ -77,9 +77,10 @@ jobs:
         run: |
           for mode in private private-half shared shared-half; do
             FLAGS=()
+            SOURCE=src/shader/ssao/ssao.comp
             if [[ "$mode" == *half* ]]; then FLAGS+=(-DSSAO_HALF_RES); fi
-            if [[ "$mode" == shared* ]]; then FLAGS+=(-DSSAO_SHARED_BINS); fi
-            glslangValidator -V -Isrc/shader "${FLAGS[@]}" src/shader/ssao/ssao.comp -o "/tmp/ssao-$mode.spv"
+            if [[ "$mode" == shared* ]]; then FLAGS+=(-DSSAO_SHARED_BINS); SOURCE=src/shader/ssao/ssao_shared.comp; fi
+            glslangValidator -V -Isrc/shader "${FLAGS[@]}" "$SOURCE" -o "/tmp/ssao-$mode.spv"
             spirv-val "/tmp/ssao-$mode.spv"
           done
 
@@ -221,4 +222,4 @@ jobs:
         shell: bash
         run: |
           gh release delete exact-067-fix29 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          gh release create exact-067-fix29             GothicLauncher-arm64-OpenGothic067-FIX29-TURNIP.apk             apk-badging.txt apk-sha256.txt apk-signature.txt needed.txt vulkan-exports.txt FIX29-native-symbols.tar.gz             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "OpenGothic 0.6.7 FIX29 — measured SSAO bin storage"             --notes "Retain FIX28 measured Turnip policy and all prior stability fixes. Add an SSAO variant using6400 bytes of lane-separated workgroup memory for per-pixel bins, preserving float32 arithmetic,32 samples, radius, selected resolution, convergence and blur. Bounds guards protect degenerate directions in both variants. Qualified Turnip650 with>=8192 bytes shared memory automatically compares8 GPU timing pairs per active AO resolution; select shared bins only for>5% median gain and>=6 paired wins, otherwise baseline. Incomplete measurement falls back when sparse budget ends. Reuse existing fence-ready nonblocking query reads;24 sparse samples with first16 spaced1sec. Host storage equivalence/selector tests and4 SPIR-V variants validated. Actual GPU compatibility, image quality and overall FPS improvement require phone testing. Keep camera/settings fixed for at least45sec to capture the selection."             --prerelease
+          gh release create exact-067-fix29             GothicLauncher-arm64-OpenGothic067-FIX29-TURNIP.apk             apk-badging.txt apk-sha256.txt apk-signature.txt needed.txt vulkan-exports.txt FIX29-native-symbols.tar.gz             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "OpenGothic 0.6.7 FIX29 — measured SSAO bin storage"             --notes "Retain FIX28 measured Turnip policy and all prior stability fixes. Add an SSAO variant using6400 bytes of lane-separated workgroup memory for per-pixel bins, preserving float32 arithmetic,32 samples, radius, selected resolution, convergence and blur. The separate shared candidate guards degenerate bin indices; baseline SSAO source remains unchanged. Qualified Turnip650 with>=8192 bytes shared memory automatically compares8 GPU timing pairs per active AO resolution; select shared bins only for>5% median gain and>=6 paired wins, otherwise baseline. Incomplete measurement falls back when sparse budget ends. Reuse existing fence-ready nonblocking query reads;24 sparse samples with first16 spaced1sec. Host storage equivalence/selector tests and4 SPIR-V variants validated. Actual GPU compatibility, image quality and overall FPS improvement require phone testing. Keep camera/settings fixed for at least45sec to capture the selection."             --prerelease
