@@ -17,3 +17,9 @@ Build/publication and device validation pending.
 ## Runner allocation blocker
 
 Run40828052739 build source7d758ce8f3013fe288e63af82674301a0f76b3d1 failed before executing steps. Attempt1 job123295552636: runner_id0, steps[], created06:14:49Z/completed06:14:52Z. Retried once through failed-jobs rerun; attempt2 job123361905192 also runner_id0, steps[], created09:17:53Z/completed09:17:56Z. There is no compiler/test result from either run. Job-log download returns404 BlobNotFound. GitHub connector does not expose check-run annotations; browser is signed out and shows404 for this private run. Exact allocation rejection reason is unknown; do not assert a billing/quota issue without annotation evidence. No FIX27 APK was produced. User can inspect the run annotation in their GitHub account; all source and host tests are preserved.
+
+## Successful publication
+
+User screenshot identified the earlier pre-run rejection as failed recent account payments or spending limit; no compile error was involved. After user requested another attempt, rerun attempt3 of40828052739, job123380601154, succeeded for exact source7d758ce8f3013fe288e63af82674301a0f76b3d1. All host checks, original empty solid-fragment/retained alpha-discard SPIR-V validation, ARM64 compilation, signature, private ABI and packaged/native Build-ID equality checks passed. Packaged engine contains FIX27 opaque-depth policy and shadow aggregate markers.
+
+Release exact-067-fix27 targets exact build7d758ce8f3013fe288e63af82674301a0f76b3d1. APK22696823bytes, SHA256aeeb1ec057979af1d6a911f04c93f55cad59a4a8afaec895aa1e3c6b92fbe0e4; release asset digest matches build checksum. Certificate SHA25618bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611 (same as prior builds). Symbols archive published alongside APK. Device rendering, startup/resume and actual FPS improvement remain unverified until phone feedback. No performance gain is claimed from CI success.
