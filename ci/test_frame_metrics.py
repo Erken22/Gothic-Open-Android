@@ -43,5 +43,5 @@ int main(){
   puts("PASS: frame timing units, summary cadence, skipped count, top GPU passes and eight-sample budget.");
 }
 ''')
-    subprocess.run(['g++','-std=c++20','-I'+str(p),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
+    subprocess.run(['g++','-std=c++20','-Wall','-Wextra','-Wconversion','-Wsign-conversion','-Werror','-I'+str(p),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
     subprocess.run([str(p/'test')],check=True,timeout=10)
