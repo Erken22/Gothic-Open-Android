@@ -12,4 +12,10 @@ Sparse GPU budget remains24; first16 samples spaced1sec, then10sec intervals. CP
 
 Host test executes real patched private/shared helpers for100000 interleaved lane operations;float bin/accumulator bits and hit/miss masks agree, bounds guards preserve neighbouring columns; shared size6400 verified. Tuner tests exercise meaningful/weak/noisy wins, complete/partial results, ignored samples, disabled target, independent half mode and frozen choice. Fresh upstream anchors apply; namespace/cached dispatch/fence concurrency/material/driver-policy/layout regressions pass. CI must compile/validate all4 SSAO variants and build/sign APK. Actual Turnip shader compiler and image/FPS validation remain phone-only.
 
-Build/publication pending.
+Build and publication verified below; device results pending.
+
+## Published verification
+
+Exact source/tag:f7d51619b0f449b29b434a54570002df2013734e. Actions run40862212630 job123408417572:success. All host assertions including AB/BA selector ordering, original-vs-shared bin storage and prior regressions passed.4 SPIR-V variants compiled/validated; native ARM64 build, package ABI/signature and packaged/native Build-ID equality checks passed. Packaged engine contains SSAO A/B/sample/choice markers. Source baseline shader compared byte-for-byte with the unchanged prior file locally.
+
+Release exact-067-fix29 targets exact source. APK22741879bytes, SHA256e994fcf9b7cca3bd53dd7df68b7f5893721b3be72ee03a73f9477a4d8d4ac0a0; GitHub asset digest matches build log checksum. Certificate SHA25618bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611; symbols archive published. Driver compilation, graphics correctness, actual measured selection and overall FPS require phone confirmation. Request45–60sec fixed save/camera/settings including final FIX29 SSAO choice. No speedup claimed from CI or host equivalence alone.
