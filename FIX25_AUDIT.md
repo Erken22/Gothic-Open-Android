@@ -58,3 +58,15 @@ successful mode activation is claimed before that test.
   lifetime and frame timing/sampling tests pass.
 - CI compiles ARM64, all existing SPIR-V variants, and verifies APK
   signing/linkage/build markers and native symbol-map Build ID.
+
+## Verified publication
+
+- Successful run: https://github.com/Erken22/Gothic-Open-Android/actions/runs/40817964676
+- Source and tag target: `13d4404f71c2769f53c6d4482f88c1f817725dda`.
+- APK: `GothicLauncher-arm64-OpenGothic067-FIX25-TURNIP.apk`, 22,696,823 bytes.
+- SHA256: `5d0aab970a3a9d5b8a0acff181ecf31772214521c7914ad7d9f812a325db5182`.
+- Strict material-policy tests passed on Android and desktop branches;
+  existing cache, namespace, fence-lifetime and frame metrics tests passed.
+- Existing signing certificate matched; private linkage, material-mode,
+  dispatch/frame markers, watchdog absence and native-map Build ID checks passed.
+- Device mode activation, graphics correctness and FPS gain remain unconfirmed.
