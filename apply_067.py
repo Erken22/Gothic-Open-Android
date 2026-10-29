@@ -594,3 +594,35 @@ endif()
 )
 
 print("FIX20 0.6.7: bundled Turnip + full HiZ; system Adreno falls back to FIX17")
+
+
+# FIX21: on Android, VSM is an opt-in debug startup path. Avoid eagerly
+# compiling its 1024-thread kernels when ordinary shadow maps are selected.
+# Turnip a6xx advertises 1024 invocations, but vsm_list_pages exceeds the
+# concurrent-wave/register budget. Keep explicit -vsm support and desktop
+# runtime toggling unchanged; normal mobile shadow resolution is untouched.
+replace_once(
+    "common/graphics/shaders.cpp",
+    '''bool Shaders::isVsmSupported() {
+  auto& gpu = Resources::device().properties();
+''',
+    '''bool Shaders::isVsmSupported() {
+#if defined(__ANDROID__)
+  if(!CommandLine::inst().isVirtualShadow())
+    return false;
+#endif
+  auto& gpu = Resources::device().properties();
+'''
+)
+replace_once(
+    "common/graphics/shaders.cpp",
+    '''  opts.doVirtualShadow  = Shaders::isVsmSupported()  && CommandLine::inst().isVirtualShadow();
+''',
+    '''  opts.doVirtualShadow  = Shaders::isVsmSupported()  && CommandLine::inst().isVirtualShadow();
+#if defined(__ANDROID__)
+  if(!CommandLine::inst().isVirtualShadow())
+    Log::i("Shadow startup: standard shadow maps; unrequested virtual shadow pipelines skipped");
+#endif
+'''
+)
+print("FIX21: ordinary Android shadows preserve quality; unused VSM pipelines are not created")
