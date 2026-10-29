@@ -183,7 +183,7 @@ std::string dirOf(void* p) {
 }
 
 void initLoader() {
-  __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX24 Vulkan dispatch: cached entry points; call tracing disabled");
+  __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX25 Vulkan dispatch: cached entry points; call tracing disabled");
   const std::string nativeDir=dirOf((void*)&initLoader);
   if(nativeDir.empty()) {
     __android_log_print(ANDROID_LOG_ERROR,OG_TAG,"cannot determine nativeLibraryDir");
