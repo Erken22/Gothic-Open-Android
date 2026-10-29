@@ -1,0 +1,15 @@
+# FIX29 SSAO bin storage with measured fallback
+
+Base FIX28 audit66e8fa2d89382b578c8444e5d63a707cbd4f0900. Upstream engine18336539f4b1a8d7b325930f613811f59fbde5db.
+
+FIX28 device log15-41-53 confirms TU_AUTOTUNE_ALGO=1(profiled), flags0x4(tune_small),24 bindless batches, shadows1024/fog64x32x32. First stable FPS median23.576 vs FIX27 19.663; early GPU median42.626 vs51.014ms. Shadow1 setup interval fell~9.6 to~0.14ms. Recorded log covers~30sec active play; this is evidence for that sample, not proof of universal gains or a controlled attribution between driver policy/layout alignment. Preserve FIX28.
+
+SSAO has25 dynamically indexed float bins per invocation. A new SSAO_SHARED_BINS variant stores them as shared float[25][64], one invocation-owned column.6400 bytes plus existing shared counters; qualify only bundled Turnip Adreno650 with>=8192-byte shared limit. No new inter-invocation sharing/barrier, no subgroup extension, no reduction in32 samples, radius100,8 iterations, selected AO resolution, convergence, blur or texture lookups. Both variants guard out-of-range bin indices from degenerate directions, leaving all defined in-range arithmetic intact. This storage change might reduce private-array access/register pressure, but actual spilling and performance are not established by SPIR-V or host tests. Shared-memory occupancy costs might make it slower.
+
+A render-thread AndroidSsaoTuner observes existing fence-ready nonblocking GPU interval results tagged private/shared and full/half. It alternates samples to balance counts. For each AO resolution,8 original and8 shared values are required; choose shared only for>5% lower median and>=6 wins across corresponding pairs. Freeze selection per process after full test; incomplete modes fall back when global sample budget ends. Timing/camera/clock drift can still confound sequential GPU comparison; require fixed camera/settings for device validation. This is not a guarantee against every workload regression.
+
+Sparse GPU budget remains24; first16 samples spaced1sec, then10sec intervals. CPU summaries remain2sec. No extra GPU query waits, synchronization removal, driver override change or graphics-quality preset change. Shared candidate pipelines compile only for eligible GPU; unsupported paths retain original. Full/half choices independently tracked; invalid/zero/non-finite/irrelevant timing results ignored. No user settings modified.
+
+Host test executes real patched private/shared helpers for100000 interleaved lane operations;float bin/accumulator bits and hit/miss masks agree, bounds guards preserve neighbouring columns; shared size6400 verified. Tuner tests exercise meaningful/weak/noisy wins, complete/partial results, ignored samples, disabled target, independent half mode and frozen choice. Fresh upstream anchors apply; namespace/cached dispatch/fence concurrency/material/driver-policy/layout regressions pass. CI must compile/validate all4 SSAO variants and build/sign APK. Actual Turnip shader compiler and image/FPS validation remain phone-only.
+
+Build/publication pending.
