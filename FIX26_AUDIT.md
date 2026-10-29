@@ -11,4 +11,10 @@ Host test executes real patched GLSL sampling functions translated with float ve
 
 Preserve FIX23 targeted fence completion, private Vulkan ABI, shared C++ runtime, FIX21 VSM startup exclusion, FIX25 RTSM/mesh/tess/ray-query guards, frame sampling and standard shadow maps.
 
-Build/publication and actual device validation pending.
+Build and publication verified below; actual device validation pending.
+
+## Published verification
+
+Build/tag source:61c16a1e88e962d78a92cc8185d6d09e6cacf187; GitHub Actions run40822353087 job123277461292:success. Four SPIR-V variants compile and pass spirv-val; all host checks pass; ARM64 build and APK packaging/signature/ABI/native-symbol Build-ID match checks pass.
+
+Release exact-067-fix26 targets the exact build SHA. APK GothicLauncher-arm64-OpenGothic067-FIX26-TURNIP.apk,22737783bytes, SHA256013a6d6492f52d8e97b396a2cade887e2646fd2a47e87b9f210e65a3319efe9b. Certificate SHA25618bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611. GitHub release asset digest matches build log hash. New FIX26 SSAO marker is present in packaged engine. Symbols archive published alongside APK. Device shader compilation, visual quality, FPS and resume remain unverified until phone feedback.
