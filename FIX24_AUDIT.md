@@ -52,3 +52,13 @@ remaining GPU/CPU bottleneck is claimed before runtime testing.
   cadence, top-pass selection and bounded GPU sample budget pass.
 - ARM64 CI verifies signature/linkage, new dispatch/frame markers, absence
   of old watchdog markers, and exact native symbol-map Build ID.
+
+## Strict compiler correction
+
+Initial CI run 40812011027 stopped in the new timing summary's partial_sort
+iterator expression because the engine treats signedness conversions as
+errors. Commit `fb7101908bc5e5d463f933a901508c556465d2b8` explicitly casts
+the bounded top-four count to the container's difference_type. The host
+frame metrics test now uses -Wall -Wextra -Wconversion -Wsign-conversion
+-Werror and passes. Runtime rendering behavior is unaffected by this type
+correction. Replacement build: https://github.com/Erken22/Gothic-Open-Android/actions/runs/40813636509
