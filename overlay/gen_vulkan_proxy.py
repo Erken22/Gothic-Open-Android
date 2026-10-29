@@ -182,8 +182,41 @@ std::string dirOf(void* p) {
   return s;
 }
 
+// Preserve external overrides; undo our own changes if custom-driver loading fails.
+struct TurnipAutotune {
+  bool algoSet=false, flagsSet=false, debugSet=false;
+  bool hadDebug=false;
+  std::string previousDebug;
+  void enable() {
+    if(std::getenv("TU_AUTOTUNE_ALGO")==nullptr)
+      algoSet=(setenv("TU_AUTOTUNE_ALGO","profiled",0)==0);
+    if(std::getenv("TU_AUTOTUNE_FLAGS")==nullptr)
+      flagsSet=(setenv("TU_AUTOTUNE_FLAGS","tune_small",0)==0);
+    const char* debug=std::getenv("TU_DEBUG");
+    hadDebug=(debug!=nullptr);
+    previousDebug=debug ? debug : "";
+    std::string value=previousDebug;
+    if(value.find("startup")==std::string::npos) {
+      if(!value.empty()) value+=",";
+      value+="startup";
+      debugSet=(setenv("TU_DEBUG",value.c_str(),1)==0);
+      }
+    const char* algo=std::getenv("TU_AUTOTUNE_ALGO");
+    const char* flags=std::getenv("TU_AUTOTUNE_FLAGS");
+    __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX28 Turnip autotune: algo=%s flags=%s",algo ? algo : "default",flags ? flags : "default");
+    }
+  void restore() {
+    if(algoSet) unsetenv("TU_AUTOTUNE_ALGO");
+    if(flagsSet) unsetenv("TU_AUTOTUNE_FLAGS");
+    if(debugSet) {
+      if(hadDebug) setenv("TU_DEBUG",previousDebug.c_str(),1);
+      else unsetenv("TU_DEBUG");
+      }
+    }
+};
+
 void initLoader() {
-  __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX27 Vulkan dispatch: cached entry points; call tracing disabled");
+  __android_log_print(ANDROID_LOG_INFO,OG_TAG,"FIX28 Vulkan dispatch: cached entry points; call tracing disabled");
   const std::string nativeDir=dirOf((void*)&initLoader);
   if(nativeDir.empty()) {
     __android_log_print(ANDROID_LOG_ERROR,OG_TAG,"cannot determine nativeLibraryDir");
@@ -194,6 +227,8 @@ void initLoader() {
   void* at=dlopen(atPath.c_str(),RTLD_NOW|RTLD_LOCAL);
   auto openVk=at ? reinterpret_cast<OpenVk>(dlsym(at,"adrenotools_open_libvulkan")) : nullptr;
   if(openVk) {
+    TurnipAutotune tuning;
+    tuning.enable();
     g_loader=openVk(RTLD_NOW|RTLD_LOCAL,1,nullptr,
                     nativeDir.c_str(),nativeDir.c_str(),
                     "libvulkan_freedreno.so",nullptr,nullptr);
@@ -203,6 +238,7 @@ void initLoader() {
                           "FIX20 Vulkan driver: Mesa Turnip 26.3.0-R6");
       return;
     }
+    tuning.restore();
     __android_log_print(ANDROID_LOG_WARN,OG_TAG,
                         "Turnip load failed; trying system Vulkan");
   } else {
