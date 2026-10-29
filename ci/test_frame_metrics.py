@@ -41,6 +41,12 @@ int main(){
   assert(Tempest::Log::lines[1].find("total-ms=30.5")!=std::string::npos);
   assert(Tempest::Log::lines[2].find("largest")!=std::string::npos);
   assert(Tempest::Log::lines[5].find("small")!=std::string::npos);
+  Tempest::Log::lines.clear();
+  m.logGpu(std::vector<Timing>{{"ShadowMap #0",0.5},{"ShadowMap #0 solid",2},{"ShadowMap #0 alpha",4},{"ShadowMap #0 particles",0.25},
+    {"ShadowMap #1",1},{"ShadowMap #1 solid",3},{"ShadowMap #1 alpha",5},{"ShadowMap #1 particles",0.5},{"SSAO",8}});
+  assert(Tempest::Log::lines[1].find("layer=0 total-ms=6.75 solid-ms=2 alpha-ms=4 particles-ms=0.25 setup-ms=0.5")!=std::string::npos);
+  assert(Tempest::Log::lines[2].find("layer=1 total-ms=9.5 solid-ms=3 alpha-ms=5 particles-ms=0.5 setup-ms=1")!=std::string::npos);
+  assert(Tempest::Log::lines[0].find("total-ms=24.25")!=std::string::npos);
   puts("PASS: frame timing units, summary cadence, skipped count, top GPU passes and 24-sample budget.");
 }
 ''')
