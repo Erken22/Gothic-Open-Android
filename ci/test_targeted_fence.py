@@ -20,6 +20,8 @@ stub=r'''
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <atomic>
+#include <thread>
 using VkResult=int;
 using VkFence=uint64_t;
 constexpr VkResult VK_SUCCESS=0,VK_NOT_READY=1,VK_TIMEOUT=2,VK_ERROR_DEVICE_LOST=-4;
@@ -39,8 +41,12 @@ static uint32_t nativeCount=0;
 static uint64_t nativeTimeout=0;
 static VkFence nativeFence=0;
 static bool nativeAll=false;
+static bool concurrent=false;
+static std::atomic_bool entered=false,releaseWait=false;
 VkResult vkWaitForFences(int,uint32_t count,const VkFence* f,bool all,uint64_t timeout) {
-  ++nativeCalls;nativeCount=count;nativeFence=*f;nativeAll=all;nativeTimeout=timeout;return nativeResult;
+  ++nativeCalls;nativeCount=count;nativeFence=*f;nativeAll=all;nativeTimeout=timeout;
+  if(concurrent){entered.store(true);while(!releaseWait.load())std::this_thread::yield();}
+  return nativeResult;
 }
 VkResult vkGetFenceStatus(int,VkFence){++queryCalls;return queryResult;}
 struct VDevice {
@@ -68,6 +74,14 @@ int main() {
   reset();t.status=VK_ERROR_DEVICE_LOST;assert(d.waitFence(t,25)==VK_ERROR_DEVICE_LOST && nativeCalls==0);
   reset();turnip=false;assert(d.waitFence(t,25)==VK_SUCCESS && nativeCalls==0 && d.anyCalls==1);
   reset();std::strcpy(d.props.name,"Turnip Adreno (TM) 740");assert(d.waitFence(t,25)==VK_SUCCESS && nativeCalls==0 && d.anyCalls==1);
+  reset();std::strcpy(d.props.name,"Turnip Adreno (TM) 650");concurrent=true;
+  std::thread waiter([&]{assert(d.waitFence(t,25)==VK_SUCCESS);});
+  while(!entered.load())std::this_thread::yield();
+  assert(!d.timeline.sync.try_lock());
+  assert(t.payload==1);
+  releaseWait.store(true);waiter.join();
+  assert(t.payload==0 && d.timeline.sync.try_lock());d.timeline.sync.unlock();
+  puts("PASS: target fence stays locked against recycling until native completion.");
   puts("PASS: exact target wait; poll/timeout/error/resource semantics; system and other GPUs keep existing path.");
 }
 '''
