@@ -96,7 +96,7 @@ jobs:
         shell: bash
         run: bash ci/prepare_turnip.sh
 
-      - name: Generate FIX40 build ID
+      - name: Generate FIX41 build ID
         shell: bash
         run: |
           {
@@ -111,137 +111,17 @@ jobs:
           "$ANDROID_HOME/cmake/3.22.1/bin/cmake" -S src -B src/build/android -G Ninja             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.0.12077973/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_STL=c++_shared             -DCMAKE_ANDROID_STL_TYPE=c++_shared             -DANDROID_PLATFORM=android-24             -DCMAKE_BUILD_TYPE="$BUILD_TYPE"             -DOPENGOTHIC_ANDROID_GAME=launcher             -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$GRADLE"
 
       - name: Verify compressed VDF option before native build
-        run: |
-          grep -Eq '^ZK_ENABLE_ZIPPED_VDF:INTERNAL=ON
         shell: bash
         run: |
-          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -- -j2
-
-      - name: Sign and verify FIX40
-        shell: bash
-        run: |
-          APK=""
-          while IFS= read -r candidate; do
-            if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$candidate" 2>/dev/null | grep -q "package: name='org.opengothic.launcher'"; then
-              APK="$candidate"
-              break
-            fi
-          done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
-          test -n "$APK"
-
-          OUT="GothicLauncher-arm64-OpenGothic067-FIX41-TURNIP.apk"
-          base64 -d .ci/gothic_fix2.keystore.b64 > gothic_fix2.keystore
-          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" aligned-unsigned.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks gothic_fix2.keystore             --ks-key-alias gothicfix2             --ks-pass pass:android             --key-pass pass:android             --out "$OUT" aligned-unsigned.apk
-
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee apk-badging.txt
-          grep -q "versionName='0.6.7'" apk-badging.txt
-
-          unzip -l "$OUT" | tee apk-files.txt
-          for lib in libopengothic_vulkan.so libvulkan_freedreno.so libadrenotools.so libmain_hook.so libhook_impl.so libc++_shared.so; do
-            grep -q "lib/arm64-v8a/$lib" apk-files.txt
-          done
-
-          unzip -p "$OUT" lib/arm64-v8a/libopengothic.so > packaged-libopengothic.so
-          unzip -p "$OUT" lib/arm64-v8a/libopengothic_vulkan.so > packaged-libopengothic_vulkan.so
-
-          READELF="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-          NM="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
-
-          "$READELF" -d packaged-libopengothic.so | tee needed.txt
-          grep -q "Shared library: \[libopengothic_vulkan.so\]" needed.txt
-          grep -q "Shared library: \[libc++_shared.so\]" needed.txt
-          unzip -p "$OUT" lib/arm64-v8a/libc++_shared.so > packaged-libc++_shared.so
-          "$READELF" -Ws packaged-libc++_shared.so | awk '$8=="__gxx_personality_v0" && $7!="UND" {ok=1} END {exit ok?0:1}'
-
-          "$NM" -D --defined-only packaged-libopengothic_vulkan.so | tee vulkan-exports.txt
-          grep -q "opengothic_vulkan_is_turnip" vulkan-exports.txt
-          grep -q "opengothic_vkGetInstanceProcAddr" vulkan-exports.txt
-          ! grep -Eq " [[:space:]]*vk[A-Z][A-Za-z0-9_]*$" vulkan-exports.txt
-          ! grep -Fq "Shared library: [libvulkan.so]" needed.txt
-          "$NM" -D --undefined-only packaged-libopengothic.so > engine-imports.txt
-          ! grep -Eq " U vk[A-Z][A-Za-z0-9_]*$" engine-imports.txt
-          grep -q "opengothic_vkCreateInstance" engine-imports.txt
-          if grep -Eq " (__gxx_personality_v0|__cxa_throw)$" vulkan-exports.txt; then
-            echo "ERROR: Vulkan proxy exports C++ exception runtime"
-            exit 1
-          fi
-
-          strings packaged-libopengothic.so | grep -F "OpenGothic 0.6.7 FIX41 Turnip"
-          strings packaged-libopengothic.so | grep -F "FIX23 fence waits: Turnip Adreno 650 uses targeted native completion"
-          strings packaged-libopengothic.so | grep -F "Shadow startup: standard shadow maps; unrequested virtual shadow pipelines skipped"
-          strings packaged-libopengothic.so | grep -F "FIX39 material mode:"
-          strings packaged-libopengothic.so | grep -F "FIX39 shadow: layer="
-          sha256sum "$OUT" | tee apk-sha256.txt
-          echo "FIX41 Turnip packaging/linkage verification: PASS"
-
-      - name: Preserve exact native symbols
-        shell: bash
-        run: |
-          LLVM="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          ELF=$(find src/build/android -name libopengothic.so -not -path '*/intermediates/*' -not -path '*/stripped_native_libs/*' | head -1)
-          test -n "$ELF"
-          "$LLVM/llvm-readelf" -n "$ELF" > native-build-id.txt
-          "$LLVM/llvm-readelf" -n packaged-libopengothic.so > packaged-build-id.txt
-          test "$(sed -n 's/.*Build ID: //p' native-build-id.txt)" = "$(sed -n 's/.*Build ID: //p' packaged-build-id.txt)"
-          "$LLVM/llvm-nm" -n -C "$ELF" > native-symbols.txt
-          grep -q 'MainWindow::onWorldLoaded' native-symbols.txt
-          tar -czf FIX41-native-symbols.tar.gz native-symbols.txt native-build-id.txt packaged-build-id.txt
-          strings packaged-libopengothic_vulkan.so | grep -F 'FIX39 Vulkan dispatch: cached entry points; call tracing disabled'
-          strings packaged-libopengothic_vulkan.so | grep -F 'FIX39 Turnip autotune: algo=%s flags=%s'
-          strings packaged-libopengothic.so | grep -F 'FIX39 frame:'
-          strings packaged-libopengothic.so | grep -F 'FIX40 fog outside:'
-          strings packaged-libopengothic.so | grep -F 'FIX40T fog GPU:'
-          strings packaged-libopengothic.so | grep -F 'FIX39 GPU sample:'
-          ! strings packaged-libopengothic_vulkan.so | grep -F 'Vulkan wait stack:'
-          ! strings packaged-libopengothic_vulkan.so | grep -F 'Vulkan pending:'
-
-      - name: Upload verified FIX40 artifact
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: OpenGothic-FIX41-verified
-          path: |
-            GothicLauncher-arm64-OpenGothic067-FIX41-TURNIP.apk
-            apk-sha256.txt
-            apk-signature.txt
-            apk-badging.txt
-            needed.txt
-            vulkan-exports.txt
-          retention-days: 30
-
-      - name: Preserve failed linkage diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: FIX41-linkage-diagnostics
-          path: |
-            packaged-libopengothic.so
-            packaged-libopengothic_vulkan.so
-            needed.txt
-            vulkan-exports.txt
-            apk-signature.txt
-            apk-badging.txt
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Publish GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          gh release delete exact-067-fix41 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          gh release create exact-067-fix41             GothicLauncher-arm64-OpenGothic067-FIX41-TURNIP.apk             apk-badging.txt apk-sha256.txt apk-signature.txt needed.txt vulkan-exports.txt FIX41-native-symbols.tar.gz             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "OpenGothic 0.6.7 FIX41 — ZenKit zipped VDF compatibility"             --notes "FIX41 enables ZenKit Union compressed VDF (ZippedStream) support for Union.vdf and Plugins/zGamePad.vdf while keeping existing FIX40T fog timing diagnostics and graphics unchanged. Reading an archive does not enable the original Windows Union plugin runtime; see FIX41_AUDIT.md."             --prerelease
- src/build/android/CMakeCache.txt
-          echo 'FIX41: ZenKit compressed VDF compile option verified'
+          grep -Fq 'ZK_ENABLE_ZIPPED_VDF:INTERNAL=ON' src/build/android/CMakeCache.txt
+          echo 'FIX41 ZenKit compressed VDF option: enabled'
 
       - name: Build release APK
         shell: bash
         run: |
           "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -- -j2
 
-      - name: Sign and verify FIX40
+      - name: Sign and verify FIX41
         shell: bash
         run: |
           APK=""
@@ -321,7 +201,7 @@ jobs:
           ! strings packaged-libopengothic_vulkan.so | grep -F 'Vulkan wait stack:'
           ! strings packaged-libopengothic_vulkan.so | grep -F 'Vulkan pending:'
 
-      - name: Upload verified FIX40 artifact
+      - name: Upload verified FIX41 artifact
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
@@ -356,4 +236,4 @@ jobs:
         shell: bash
         run: |
           gh release delete exact-067-fix41 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          gh release create exact-067-fix41             GothicLauncher-arm64-OpenGothic067-FIX41-TURNIP.apk             apk-badging.txt apk-sha256.txt apk-signature.txt needed.txt vulkan-exports.txt FIX41-native-symbols.tar.gz             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "OpenGothic 0.6.7 FIX40T — mode-tagged fog GPU timings"             --notes "FIX40T adds GPU-timestamp reporting for fog in ORIGINAL and TEST modes, even when fog is outside the top four passes; no shader/rendering changes from FIX40. Keep AO Original during fog comparison. See FIX40T_AUDIT.md."             --prerelease
+          gh release create exact-067-fix41             GothicLauncher-arm64-OpenGothic067-FIX41-TURNIP.apk             apk-badging.txt apk-sha256.txt apk-signature.txt needed.txt vulkan-exports.txt FIX41-native-symbols.tar.gz             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "OpenGothic 0.6.7 FIX41 — zipped VDF support"             --notes "ZenKit compressed VDF reading enabled to handle Union.vdf and Plugins/zGamePad.vdf; original Windows Union plugin execution is not supported by this change. Render remains FIX40T."             --prerelease
