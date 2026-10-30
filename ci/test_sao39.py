@@ -75,8 +75,8 @@ with tempfile.TemporaryDirectory() as t:
 renderer=(r/'common/graphics/renderer.cpp').read_text();menu=(r/'common/ui/gamemenu.cpp').read_text()
 assert 'halfResolution && !settings.pathTraceEnabled && AndroidSaoCompare39::supported()' in renderer
 assert 'settings.aoMethod39==1 || (compare39 && AndroidSaoCompare39::useFused())' in renderer
-assert 'Original|SAO test|Compare' in menu and '"ENGINE","aoMethod39"' in menu
+assert 'Original|SAO test' in menu and 'Original|SAO test|Compare' not in menu and '"ENGINE","aoMethod39"' in menu
 assert 'int y=1450;' in menu and '1000,7350,6200' in menu
-# Nine 600-high rows at existing 625 spacing fit between title and Back.
-assert 750+650<=1450 and 1450+8*625+600<7350 and 7350+650<=8192
-print('PASS: manual/compare/original modes, half-AO target gate and nine-row menu bounds.')
+# Ten rows at FIX40's 550 spacing fit between title and Back.
+assert 750+650<=1450 and 1450+9*550+600<7350 and 7350+650<=8192
+print('PASS: manual SAO/original modes, half-AO gate and FIX40 ten-row menu bounds.')
