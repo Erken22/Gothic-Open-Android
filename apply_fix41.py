@@ -19,5 +19,6 @@ if content.count(miniz_anchor) != 1:
     raise SystemExit(f"FIX41: expected one bundled miniz target, got {content.count(miniz_anchor)}")
 content = content.replace(miniz_anchor, "if(NOT TARGET miniz)" + chr(10) + "  " + miniz_anchor + chr(10) + "endif()", 1)
 cmake.write_text(content)
-assert 'set(ZK_ENABLE_ZIPPED_VDF      ON CACHE INTERNAL "")' in cmake.read_text()\nassert "if(NOT TARGET miniz)" in cmake.read_text()
+assert 'set(ZK_ENABLE_ZIPPED_VDF      ON CACHE INTERNAL "")' in cmake.read_text()
+assert "if(NOT TARGET miniz)" in cmake.read_text()
 print("FIX41 zipped VDF build option: PASS")
