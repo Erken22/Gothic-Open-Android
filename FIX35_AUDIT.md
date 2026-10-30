@@ -75,3 +75,26 @@ Build/publication pending.
 - Release: https://github.com/Erken22/Gothic-Open-Android/releases/tag/exact-067-fix35
 
 Phone FPS, image quality, sunshafts at water boundaries and stability unverified.
+
+## Phone comparison — small gain below selection thresholds, 2026-10-30
+
+Log: `logcat_recording_2026-10-30_09-23-40.zip`; FIX35 confirmed.
+8 original/fused samples. Median fog chain: original 4.522630 ms, fused
+4.387057 ms (0.135573 ms / 2.99766% less time). Median whole GPU frame:
+43.0872905 vs 42.8203895 ms (0.266901 ms / 0.61944% less time).
+Fused wins all 8 paired fog and frame comparisons. Automatic selector correctly
+retains original: required >5% fog and >1% frame thresholds were not met.
+
+The eighth pair has a substantially changed scene/workload (GPU frame ~37 ms
+instead of ~43 ms). First seven medians still show the same small direction:
+fog 4.523437 vs 4.391562 ms; frame 43.126770 vs 42.904426 ms.
+Later 27–29 FPS must not be attributed to fusion: selection has retained original
+and the workload changed. New explicit mask end markers change attribution versus
+older builds; do not compare the old ~5.9-ms fog marker directly with the new
+~3.38-ms mask subrange or claim it was halved. Whole-frame comparison is primary.
+No fatal signal, FATAL EXCEPTION, VK_ERROR, GPU fault or OpenGothic ANR found.
+No screenshots supplied: visual equivalence, particularly at water, not established.
+
+This is a modest promising timing direction, not a demonstrated material FPS gain.
+Keep original selected for now; next structural target is indexed static opaque
+far-shadow geometry with batching retained and preparation cost included.
