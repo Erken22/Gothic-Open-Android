@@ -19,3 +19,8 @@ Local: apply against pristine target files; Python syntax; existing Vulkan names
 CI additionally compiles original resolve, original ambient and candidate ambient with glslangValidator, runs spirv-val, and verifies pack/unpack survive into candidate SPIR-V. Android ARM64 native compile, packaging, private Vulkan linkage, release signing, version/build ID and symbol preservation must pass before APK delivery.
 
 Phone performance and pixels remain unvalidated. Host checks/CI do not prove a speedup or pixel equivalence on Adreno. UNORM8 quantization preserves precision but FP scheduling and exact rounding at ties may differ from the original attachment conversion. Inspect depth edges/thin geometry and scene brightness on device; retain original fallback.
+
+## CI release result
+Run [41006729152](https://github.com/Erken22/Gothic-Open-Android/actions/runs/41006729152), job 123903200086: success. Native Gradle build completed in 8m 2s; shader validation, host tests, ARM64 build, packaging/private Vulkan linkage, signing and native symbol/build-ID preservation passed. Existing third-party compiler warnings remain; no compile failure. Tag `exact-067-fix37` points to build commit `fd7e324b55374bd2d2fe96e91a19f9b2d2d44518`.
+
+APK `GothicLauncher-arm64-OpenGothic067-FIX37-TURNIP.apk`: 22,729,591 bytes, SHA256 `dd546086c256f3005abd7ba8d4a0299e6519484f77f7a656a1509c0f7f0500ef`. Verified signer SHA256 `18bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611` (same update identity). Release asset digest agrees with signed build output. Phone result pending; no FPS or pixel-equivalence claim.
