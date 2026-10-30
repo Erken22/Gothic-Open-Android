@@ -4,10 +4,13 @@ from pathlib import Path
 import sys,hashlib,subprocess,tempfile
 r=Path(sys.argv[1]);s=(r/'shader/ssao/sao39.comp').read_text();old=(r/'shader/ssao/ssao.comp').read_text()
 for p,h in {
- 'ssao.comp':'a3fb0c36ceed39f0f0d8747418d2715e57d8f594b0d997217db28bcf80a23317',
+ # ssao.comp is deliberately modified by FIX42/43; assert invariants below.
  'half_resolution.glsl':'29570325da3dc936d3bcf97f31a13cb86bea2f0c87cfbdd175c9b12248b97fd1',
  'ssao_upsample.comp':'4314b6d21ef95a8201b78cd0922e85758ff7954bf4f825d4307cfd691374af92',
 }.items():assert hashlib.sha256((r/'shader/ssao'/p).read_bytes()).hexdigest()==h,p
+assert "if(valid && at0.z<1.0)" in old, "FIX42 sky optimization missing"
+assert "const uint  numSamples     = 32;" in old
+assert "const uint  numIter        = 8;" in old
 def fn(text,start,end):return text[text.index(start):text.index(end,text.index(start))]
 assert fn(s,'vec3 reconstructNormal(','\n// Alchemy') .rstrip()==fn(old,'vec3 reconstructNormal(','\nvoid main()').rstrip()
 for forbidden in ['barrier(', 'atomic', 'hitV[', 'ssaoIsSolved(']:assert forbidden not in s,forbidden
