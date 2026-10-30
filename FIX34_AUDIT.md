@@ -37,3 +37,16 @@ existing renderer tests, Vulkan loader ABI and consistent Android update signing
 CPU arithmetic checks do not establish bit-identical output from the GPU compiler.
 
 Phone performance/visual/stability validation pending. No FPS gain claimed.
+
+## Verified build
+
+- Source/build/tag commit: `e855323523124ae67ebe4796f2e1c1d425ad0d27`.
+- GitHub Actions run `40994254589`, job `123863579731`: success.
+- All host checks, four glslang/spirv-val shader variants, native build,
+  packaging/loader ABI, build-ID/symbol matching and signing checks passed.
+- APK: 22,758,263 bytes; SHA-256
+  `b174d1fcfd9a6a1ce1173a70704b463f8bbc2ec105262ce99eb0f8b9b0bdd17b`.
+- Signer SHA-256:
+  `18bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611`.
+- Release: https://github.com/Erken22/Gothic-Open-Android/releases/tag/exact-067-fix34
+- Phone FPS, visual match and stability remain unverified.
