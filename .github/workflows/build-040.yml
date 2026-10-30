@@ -181,7 +181,7 @@ jobs:
           grep -q 'MainWindow::onWorldLoaded' native-symbols.txt
           tar -czf FIX40-native-symbols.tar.gz native-symbols.txt native-build-id.txt packaged-build-id.txt
           strings packaged-libopengothic_vulkan.so | grep -F 'FIX39 Vulkan dispatch: cached entry points; call tracing disabled'
-          strings packaged-libopengothic_vulkan.so | grep -F 'FIX40 Turnip autotune: algo=%s flags=%s'
+          strings packaged-libopengothic_vulkan.so | grep -F 'FIX39 Turnip autotune: algo=%s flags=%s'
           strings packaged-libopengothic.so | grep -F 'FIX39 frame:'
           strings packaged-libopengothic.so | grep -F 'FIX40 fog outside:'
           strings packaged-libopengothic.so | grep -F 'FIX39 GPU sample:'
