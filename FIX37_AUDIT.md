@@ -36,3 +36,15 @@ Analyzed supplied `logcat_recording_2026-10-30_10-21-01.zip` directly. FIX37 bui
 Local chain difference is about 0.370 ms. This is a promising limited result, not a confirmed whole-frame FPS gain. Do not interpret the whole-frame comparison as proof of a regression either: far-shadow region varies from 10.439 to 4.250 ms during the A/B window, SSAO varies from 8.580 to 6.172 ms, and scene/workload equivalence is not established. Original ambient timings in samples 1 and 5 are unusually small (~0.033 ms), as is fused sample 5 (~0.073 ms); these are recorded as-is and not selectively removed to improve the outcome. No cause is established for these small intervals. The stable-looking second pair has chain 1.532656 vs 1.153073 ms and frame 42.512759 vs 42.093593 ms, but one pair is insufficient evidence.
 
 No fatal signal/exception, VK_ERROR, GPU fault, ANR, device-lost or assertion-failure signatures were found. This log cannot validate image quality. Keep candidate optional/original selected. A stationary repeat on the same APK could establish whether the small local saving survives whole-frame comparison; a rebuild is unnecessary for that check. The much larger remaining SSAO producer (~8 ms in several samples) remains a separate optimization target.
+
+## Stationary phone repeat: 2026-10-30 10:23:59
+Supplied `logcat_recording_2026-10-30_10-23-59.zip` contains a fresh complete eight-pair run. Workload is substantially steadier: far shadow during the A/B window stays about 10.37–10.51 ms; SSAO producer stays about 8.18–8.36 ms. Original ambient is consistently 0.73–0.82 ms; the previous run's tiny ambient intervals do not recur.
+
+- Resolve+ambient median: original **1.5094795 ms**, fused **1.1780985 ms**, saving **0.331381 ms / 21.95%**, 8/8 pair wins.
+- Whole-frame median: original **42.2386445 ms**, fused **41.961848 ms**, saving **0.2767965 ms / 0.6553%**, 6/8 pair wins.
+- Tuner selected **original** because whole-frame gain is below the predefined >1% threshold. Chain and pair-win gates pass. Do not change the threshold after observing this result.
+- First original frame is higher (43.619426 ms) than the remaining baseline samples; median limits its influence. Result supports a small local improvement, with whole-frame timing trending in the same direction. It does not establish a perceptible FPS gain or isolate every timing confounder.
+- Most subsequent CPU-window FPS readings are about 23.5–23.9; these mix candidate/original windows or follow fallback and are not a separate path-matched FPS comparison.
+- No fatal signal/exception, VK_ERROR, GPU fault, ANR, device-lost or assertion-failure signatures found. Pixels still require visual assessment.
+
+The repeat resolves the previous varying-workload ambiguity enough to classify this experiment as a small saving below the current adoption threshold. Retain measured fallback behavior; next substantial target remains the SSAO producer (~8.3 ms), rather than further tuning this ~0.33 ms resolve saving. No further identical repeat or APK rebuild is needed solely to classify FIX37.
