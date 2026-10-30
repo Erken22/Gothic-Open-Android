@@ -98,3 +98,30 @@ Build/publication pending.
 - Release: https://github.com/Erken22/Gothic-Open-Android/releases/tag/exact-067-fix36
 
 Phone path eligibility, rasterization, motion/shadow stability and FPS unverified.
+
+## Phone result — no material whole-frame gain, 2026-10-30
+
+Log `logcat_recording_2026-10-30_09-54-16.zip`, FIX36 confirmed. Candidate is
+eligible and executed: one batch, capacity8504 meshlets, 6,531,072 index bytes.
+Command sample2 shows two preparation dispatches and the indexed draw path's
+existing ten solid indirect batches (one eligible landscape replacement).
+Indirect dispatch group count is not available from this CPU command audit.
+
+All8 medians: complete shadow region original10.388255 ms, indexed10.313333 ms
+(0.074922 ms / 0.7212% less time). Whole GPU frame42.801457 vs42.7909885 ms
+(0.0104685 ms / 0.02446% less time). Shadow pair wins7/8, frame pair wins3/8.
+Selector correctly retained original; neither median threshold nor frame wins met.
+
+Scene/workload changes in pairs7–8 (~35–39-ms frames instead of~43). First6
+stable-region medians: shadow10.3894265 vs10.3174995 ms (~0.6923% lower), frame
+42.8459625 vs42.9052855 ms (indexed~0.059323 ms /0.1385% higher). This subset also
+shows no useful GPU-frame improvement. Later25–29 FPS is not attributable to the
+candidate: original was selected and scene changed.
+
+No Fatal signal, FATAL EXCEPTION, VK_ERROR, GPU fault or OpenGothic ANR found.
+No images supplied: pixel/shadow equivalence is still not established.
+This experiment covers only opaque Landscape in the far shadow. It does not
+measure the benefit of indexed rendering for all static/movable/animated draws.
+No direct vertex invocation counters or isolated index-generation timing were
+collected; cannot attribute the negligible net gain to a proven hardware cause.
+Keep the prototype disabled; do not automatically expand its scope on this result.
