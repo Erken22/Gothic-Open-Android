@@ -34,6 +34,14 @@ replace("shader/ssao/ssao.comp",
   const int subgroupSteps44 = subgroupMax(maxSteps);
   if(subgroupElect())
     atomicMax(shMaxSteps, subgroupSteps44);""")
+# Subgroup ops require SPIR-V >= 1.3 on Vulkan 1.1 / target Turnip 1.3.
+# Restrict upgraded SPIR-V target to original full/half SSAO shaders.
+replace("shader/CMakeLists.txt",
+    "add_shader(ssao.comp                 ssao/ssao.comp)",
+    "add_shader(ssao.comp                 ssao/ssao.comp --target-env spirv1.3)")
+replace("shader/CMakeLists.txt",
+    "add_shader(ssao_half.comp            ssao/ssao.comp -DSSAO_HALF_RES)",
+    "add_shader(ssao_half.comp            ssao/ssao.comp -DSSAO_HALF_RES --target-env spirv1.3)")
 p=(r/"shader/ssao/ssao.comp").read_text()
 c=(r/"shader/ssao/convergence.glsl").read_text()
 assert "const uint  numSamples     = 32;" in p
