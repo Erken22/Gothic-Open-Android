@@ -49,7 +49,7 @@ int main(){
  mode=1;AndroidPipelineAudit::report(VK_NULL_HANDLE,VK_NULL_HANDLE,"ssao.comp",8,8,1,getProc);assert(has("no executables"));
  mode=2;Tempest::Log::lines.clear();AndroidPipelineAudit::report(VK_NULL_HANDLE,VK_NULL_HANDLE,"ssao.comp",8,8,1,getProc);
  assert(has("executables=16") && has("partial=1") && Tempest::Log::lines.size()<=1041);
- mode=3;Tempest::Log::lines.clear();AndroidPipelineAudit::report(VK_NULL_HANDLE,VK_NULL_HANDLE,"ssao.comp",8,8,1,getProc);assert(!has("FIX35 stat:"));
+ mode=3;Tempest::Log::lines.clear();AndroidPipelineAudit::report(VK_NULL_HANDLE,VK_NULL_HANDLE,"ssao.comp",8,8,1,getProc);assert(!has("FIX36 stat:"));
  mode=4;AndroidPipelineAudit::report(VK_NULL_HANDLE,VK_NULL_HANDLE,"ssao.comp",8,8,1,getProc);assert(has("unavailable entry points"));
  AndroidCommandAudit::tickets=0;AndroidCommandAudit a;a.begin(false);assert(!a.active && AndroidCommandAudit::tickets==0);
  a.begin(true);a.marker("GBuffer");a.pass();

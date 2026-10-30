@@ -47,38 +47,31 @@ int main(){
   assert(Tempest::Log::lines[1].find("layer=0 total-ms=6.75 solid-ms=2 alpha-ms=4 particles-ms=0.25 setup-ms=0.5")!=std::string::npos);
   assert(Tempest::Log::lines[2].find("layer=1 total-ms=9.5 solid-ms=3 alpha-ms=5 particles-ms=0.5 setup-ms=1")!=std::string::npos);
   assert(Tempest::Log::lines[0].find("total-ms=24.25")!=std::string::npos);
-  auto reset=[](){AndroidFogFusion::state()={};AndroidFogFusion::configure(true);};
-  auto send=[](bool fused,double mask,double apply,double total){
-    std::vector<Timing> t{{"Other",total-mask-apply}};
-    if(fused)t.push_back({"Fog fused apply",apply});
-    else {t.push_back({"Fog original mask",mask});t.push_back({"Fog original apply",apply});}
-    AndroidFogFusion::observe(t);
+  auto reset=[](){AndroidIndexedShadow36::state()={};AndroidIndexedShadow36::configure(true);};
+  auto send=[](bool indexed,double chain,double frame){
+    AndroidIndexedShadow36::observe(std::vector<Timing>{{"Other",frame-chain},{indexed?"Shadow36 indexed begin":"Shadow36 original begin",chain*0.1},{"ShadowMap #1 solid",chain*0.5},{"ShadowMap #1 alpha",chain*0.4},{"Shadow36 end",0}});
   };
-  reset();send(false,6,2,43);assert(AndroidFogFusion::useFused());
-  send(true,0,6,40);assert(AndroidFogFusion::useFused());
-  send(true,0,6,40);assert(!AndroidFogFusion::useFused());
-  send(false,6,2,43);assert(!AndroidFogFusion::useFused());
-  reset();for(int i=0;i<8;++i){send(false,6,2,43);send(true,0,6,40);}
-  assert(AndroidFogFusion::state().decided && AndroidFogFusion::useFused());
-  send(true,0,100,150);assert(AndroidFogFusion::useFused()); // Choice frozen.
-  reset();for(int i=0;i<8;++i){send(false,6,2,43);send(true,0,6,43);}
-  assert(!AndroidFogFusion::useFused()); // Moving work out of fog marker cannot pass the whole-frame gate.
-  reset();for(int i=0;i<8;++i){send(false,6,2,43);send(true,0,7.7,39);}
-  assert(!AndroidFogFusion::useFused()); // <5% fog gain insufficient.
-  reset();for(int i=0;i<8;++i){send(false,6,2,43);send(true,0,i<5?6:9,39);}
-  assert(!AndroidFogFusion::useFused()); // Fog median alone insufficient.
-  reset();for(int i=0;i<8;++i){send(false,6,2,43);send(true,0,6,i<5?39:44);}
-  assert(!AndroidFogFusion::useFused()); // Frame median alone insufficient.
-  reset();AndroidFogFusion::observe(std::vector<Timing>{{"Fog original mask",6},{"Other",35}});
-  AndroidFogFusion::observe(std::vector<Timing>{{"Fog original mask",6},{"Fog original apply",2},{"Fog fused apply",6}});
-  AndroidFogFusion::observe(std::vector<Timing>{{"Fog fused apply",6},{"Fog fused apply",6}});
-  AndroidFogFusion::observe(std::vector<Timing>{{"Fog fused apply",NAN}});
-  AndroidFogFusion::observe(std::vector<Timing>{{"Fog fused apply",-1}});
-  assert(AndroidFogFusion::state().no==0 && AndroidFogFusion::state().nf==0);
-  send(false,6,2,43);AndroidFogFusion::finish();assert(!AndroidFogFusion::useFused());
-  reset();AndroidFogFusion::configure(false);send(false,6,2,43);
-  assert(AndroidFogFusion::state().no==0 && !AndroidFogFusion::useFused());
-  puts("PASS: paired fog producer+consumer aggregation, whole-frame gate, ABBA, paired wins, incomplete/mixed/invalid samples and frozen fallback.");
+  reset();send(false,10,43);assert(AndroidIndexedShadow36::useFused());
+  send(true,8,40);assert(AndroidIndexedShadow36::useFused());
+  send(true,8,40);assert(!AndroidIndexedShadow36::useFused());
+  send(false,10,43);assert(!AndroidIndexedShadow36::useFused());
+  reset();for(int i=0;i<8;++i){send(false,10,43);send(true,8,40);}assert(AndroidIndexedShadow36::state().decided && AndroidIndexedShadow36::useFused());
+  send(true,99,150);assert(AndroidIndexedShadow36::useFused());
+  reset();for(int i=0;i<8;++i){send(false,10,43);send(true,8,43);}assert(!AndroidIndexedShadow36::useFused());
+  reset();for(int i=0;i<8;++i){send(false,10,43);send(true,9.6,40);}assert(!AndroidIndexedShadow36::useFused());
+  reset();for(int i=0;i<8;++i){send(false,10,43);send(true,i<5?8:11,40);}assert(!AndroidIndexedShadow36::useFused());
+  reset();for(int i=0;i<8;++i){send(false,10,43);send(true,8,i<5?40:44);}assert(!AndroidIndexedShadow36::useFused());
+  reset();
+  for(auto t:std::vector<std::vector<Timing>>{
+    {{"Shadow36 original begin",1}},
+    {{"Shadow36 end",1}},
+    {{"Shadow36 original begin",1},{"Shadow36 indexed begin",1},{"Shadow36 end",1}},
+    {{"Shadow36 indexed begin",NAN},{"Shadow36 end",1}},
+    {{"Shadow36 indexed begin",-1},{"Shadow36 end",1}}})AndroidIndexedShadow36::observe(t);
+  assert(AndroidIndexedShadow36::state().no==0 && AndroidIndexedShadow36::state().nf==0);
+  send(false,10,43);AndroidIndexedShadow36::finish();assert(!AndroidIndexedShadow36::useFused());
+  reset();AndroidIndexedShadow36::configure(false);send(false,10,43);assert(AndroidIndexedShadow36::state().no==0);
+  puts("PASS: complete shadow region aggregation including preparation, whole-frame gate, ABBA, pair wins, malformed/partial/unsupported fallback and frozen decision.");
   puts("PASS: frame timing units, summary cadence, skipped count, top GPU passes and 24-sample budget.");
 }
 ''')
