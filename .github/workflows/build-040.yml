@@ -7,6 +7,7 @@ on:
       - apply_067.py
       - apply_fix40.py
       - ci/test_fix40.py
+      - ci/test_sao39.py
       - ci/prepare_turnip.sh
       - overlay/gen_vulkan_proxy.py
       - .github/workflows/build-040.yml
