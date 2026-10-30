@@ -50,3 +50,20 @@ Phone performance/visual/stability validation pending. No FPS gain claimed.
   `18bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611`.
 - Release: https://github.com/Erken22/Gothic-Open-Android/releases/tag/exact-067-fix34
 - Phone FPS, visual match and stability remain unverified.
+
+## Phone result — candidate rejected, 2026-10-30
+
+Log: `logcat_recording_2026-10-30_08-40-31.zip`; FIX34 confirmed.
+Half-resolution SSAO: original median 8.325182 ms, candidate 9.132786 ms
+(+9.7007% time); candidate wins 0/8. Automatic selector retained original.
+The last original sample fell to 6.563489 ms alongside other pass changes,
+so the final pair is not scene-stable. First seven pairs still all reject the
+candidate; medians 8.329531 vs 9.127291 ms (~9.58% slower).
+Compiler reports half-resolution instruction count 811 -> 1156, registers
+16 -> 21, Max Waves Per Core 8 -> 6. These are compiler statistics, not live
+occupancy measurements. More instructions/register use is consistent with the
+measured regression; this is not a measured attribution of GPU bottlenecks.
+During the early test FPS ~23; later ~25-29 with a changed workload. Later FPS
+must not be attributed to this rejected candidate. No fatal signal, Vulkan
+error, GPU fault or OpenGothic ANR found in this recording.
+This bucket-switch approach should be removed from the next build.
