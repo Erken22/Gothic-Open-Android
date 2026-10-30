@@ -59,3 +59,19 @@ water, sunshafts, depth edges, performance and stability still require validatio
 No measured FPS gain claimed yet.
 
 Build/publication pending.
+
+## Verified build
+
+- Build/tag commit: `a2af6cef38a8df39dd217a00583f037ffd9e7ed3`.
+- Actions run `41000949645`, job `123884944126`: success.
+- All host regressions, 50,000-case mask test and paired whole-frame tuner tests
+  passed. Original compute/original fragment/fused fragment compiled and passed
+  spirv-val. Native APK, library/loader ABI, native-symbol Build ID and signature
+  verification passed.
+- APK: 22,729,591 bytes; SHA-256
+  `0679783e1e8e8a59a5b0d5e6b3784d9e421f9cca48bf2e9ac8b3fdeb075964e7`.
+- Signer SHA-256:
+  `18bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611`.
+- Release: https://github.com/Erken22/Gothic-Open-Android/releases/tag/exact-067-fix35
+
+Phone FPS, image quality, sunshafts at water boundaries and stability unverified.
