@@ -95,9 +95,9 @@ jobs:
           python3 ci/test_fix43.py
           glslangValidator -V -Isrc/shader -DVOLUMETRIC -DFIX40_FOG_TRIVIAL_OUTSIDE -S comp src/shader/sky/fog.frag -o /tmp/fog40.spv
           spirv-val /tmp/fog40.spv
-          glslangValidator -V -Isrc/shader -DSSAO_HALF_RES src/shader/ssao/ssao.comp -o /tmp/ssao-original.spv
+          glslangValidator -V --target-env spirv1.3 -Isrc/shader -DSSAO_HALF_RES src/shader/ssao/ssao.comp -o /tmp/ssao-original.spv
           spirv-val /tmp/ssao-original.spv
-          glslangValidator -V -Isrc/shader -DSSAO_HALF_RES src/shader/ssao/ssao.comp -o /tmp/ssao42-half.spv
+          glslangValidator -V --target-env spirv1.3 -Isrc/shader -DSSAO_HALF_RES src/shader/ssao/ssao.comp -o /tmp/ssao42-half.spv
           spirv-val /tmp/ssao42-half.spv
           glslangValidator -V -Isrc/shader src/shader/ssao/sao39.comp -o /tmp/spatial-ao.spv
           spirv-val /tmp/spatial-ao.spv
