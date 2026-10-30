@@ -81,3 +81,20 @@ Turnip autotune bias; phone tests must keep camera/settings stable initially.
 CPU tests do not validate GPU rasterization, barriers on real hardware, driver
 vertex reuse, image equality, stability or FPS. Phone validation pending.
 Build/publication pending.
+
+## Verified build
+
+- Build/tag commit: `a82ebe3990defc88a6e818bbac019b139d2a2d6b`.
+- Actions run `41004158039`, job `123895128619`: success.
+- Host regressions, 2,304,000 codec checks, actual Vulkan forwarding mocks and
+  whole-region/frame selection checks passed. Both compute shaders and indexed
+  vertex SPIR-V compiled and passed spirv-val. Native APK build, private exports
+  (including opengothic_vkCmdDrawIndexedIndirect), symbol Build ID and signing
+  checks passed.
+- APK: 22,733,687 bytes; SHA-256
+  `d0d4a3bfa32a37c3a4ef200cf7f5239afe266443a6df5492e340ddf0758b17c3`.
+- Signer SHA-256:
+  `18bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611`.
+- Release: https://github.com/Erken22/Gothic-Open-Android/releases/tag/exact-067-fix36
+
+Phone path eligibility, rasterization, motion/shadow stability and FPS unverified.
