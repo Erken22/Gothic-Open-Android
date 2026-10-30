@@ -24,3 +24,15 @@ Phone performance and pixels remain unvalidated. Host checks/CI do not prove a s
 Run [41006729152](https://github.com/Erken22/Gothic-Open-Android/actions/runs/41006729152), job 123903200086: success. Native Gradle build completed in 8m 2s; shader validation, host tests, ARM64 build, packaging/private Vulkan linkage, signing and native symbol/build-ID preservation passed. Existing third-party compiler warnings remain; no compile failure. Tag `exact-067-fix37` points to build commit `fd7e324b55374bd2d2fe96e91a19f9b2d2d44518`.
 
 APK `GothicLauncher-arm64-OpenGothic067-FIX37-TURNIP.apk`: 22,729,591 bytes, SHA256 `dd546086c256f3005abd7ba8d4a0299e6519484f77f7a656a1509c0f7f0500ef`. Verified signer SHA256 `18bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611` (same update identity). Release asset digest agrees with signed build output. Phone result pending; no FPS or pixel-equivalence claim.
+
+## Phone log: 2026-10-30 10:21
+Analyzed supplied `logcat_recording_2026-10-30_10-21-01.zip` directly. FIX37 build and bundled-driver/material gates executed; all eight ABBA pairs collected at 10:21:15.826–10:21:30.999. Tuner selected **original**.
+
+| Median GPU interval | Original ms | Fused ms | Observation |
+|---|---:|---:|---|
+| Resolve plus ambient | 1.520234 | 1.150026 | 24.35% smaller, 7/8 pair wins |
+| Whole sampled frame | 40.264609 | 40.889348 | 1.55% larger, only 4/8 pair wins |
+
+Local chain difference is about 0.370 ms. This is a promising limited result, not a confirmed whole-frame FPS gain. Do not interpret the whole-frame comparison as proof of a regression either: far-shadow region varies from 10.439 to 4.250 ms during the A/B window, SSAO varies from 8.580 to 6.172 ms, and scene/workload equivalence is not established. Original ambient timings in samples 1 and 5 are unusually small (~0.033 ms), as is fused sample 5 (~0.073 ms); these are recorded as-is and not selectively removed to improve the outcome. No cause is established for these small intervals. The stable-looking second pair has chain 1.532656 vs 1.153073 ms and frame 42.512759 vs 42.093593 ms, but one pair is insufficient evidence.
+
+No fatal signal/exception, VK_ERROR, GPU fault, ANR, device-lost or assertion-failure signatures were found. This log cannot validate image quality. Keep candidate optional/original selected. A stationary repeat on the same APK could establish whether the small local saving survives whole-frame comparison; a rebuild is unnecessary for that check. The much larger remaining SSAO producer (~8 ms in several samples) remains a separate optimization target.
