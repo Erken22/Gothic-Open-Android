@@ -32,3 +32,22 @@ CI must additionally compile/spirv-val both producers, build/sign ARM64 APK, ver
 
 ## Phone check
 Install over the preceding FPS build. Keep existing graphics settings and stay still for 30–60 seconds after loading the same location to collect default Compare. Send logcat. For visible comparison, change AO method between Original and SAO test at the same camera position and capture both screenshots; keep Half-res SSAO On. Inspect wall corners, steps, foliage/fences/thin objects and noise during movement. Compare returns to original automatically; select SAO test explicitly to view candidate after the timing run.
+
+## Phone result: 2026-10-30 12:27:41 (FIX39)
+Source: supplied `logcat_recording_2026-10-30_12-27-41.txt` and signed `OpenGothic-FIX39-verifi.zip`. APK metadata verifies package `org.opengothic.launcher`, version 0.6.7, arm64 and v2/v3 signing. Runtime identifies Mesa Turnip 26.3.0-R6 on Adreno 650, FIX39 cached Vulkan dispatch and profiled/tune_small autotune. Material bindless mode active; `FIX39 draw batches: count=24 bindless=1`.
+
+The default bounded Compare ran both AO producers and completed eight valid comparisons, automatically returning original regardless of performance. **SAO is rejected on performance**:
+
+| GPU metric | Original | SAO prototype | Decision |
+| --- | ---: | ---: | --- |
+| AO producer, median | 8.289583 ms | 10.730885 ms | SAO +2.441302 ms (29.45% slower) |
+| Sampled full GPU frame, median | 42.861900 ms | 45.155884 ms | SAO +2.293984 ms (5.35% slower) |
+| Paired wins | 0/8 AO and 1/8 full frame for SAO | — | Fails unchanged thresholds |
+
+The independently parsed arithmetic mean over eight AO samples is 8.271 ms original vs 10.717 ms SAO; medians above are from the experiment's own completion line and are preferred for the decision. No image equivalence is established; do not adopt SAO in an optimized build. Existing original AO producer and filtering should remain the reference.
+
+15 published frame-summary samples: mean FPS 23.146 (range 20.309–23.898), median 23.423; 2400x1080. Mean `sim-ms` 11.646, `record-ms` 6.005, `present-ms` 25.046, `pace-ms` approximately 0.0015 and `skipped=0`. GPU sample total across 17 observations mean 44.678 ms, median 44.995 ms. Published GPU pass samples: far shadow layer #1 median about 10.402 ms (solid ~5.499, alpha ~4.758); fog-sunshaft occlusion ~5.972 ms; GBuffer ~5.437 ms. These isolated pass measurements cannot be simply summed with CPU/present time.
+
+No `AndroidRuntime` fatal exception, native fatal signal, explicit Vulkan device loss or game-specific ANR was observed in this recording. A nonfatal startup message `Failed to created DmLoader object. Out of memory?` appears, but gameplay continues afterward and this alone does not prove device OOM. At 12:28:39 the user moved to MIUI recents; the recording does not demonstrate a successful return into the game, so resume/black-screen is not validated.
+
+**Decision:** keep original AO as the default; don't carry the separate SAO prototype forward as a performance improvement. For the next *isolated*, performance/visual-quality-gated investigation prioritize the far-shadow pass and full-resolution fog sunshaft occlusion (10.4 ms and 6.0 ms respectively), with the original render output preserved as the reference. No unconditional reduction in resolution, shadows or geometry is justified by this log.
