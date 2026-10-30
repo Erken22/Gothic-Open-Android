@@ -47,37 +47,38 @@ int main(){
   assert(Tempest::Log::lines[1].find("layer=0 total-ms=6.75 solid-ms=2 alpha-ms=4 particles-ms=0.25 setup-ms=0.5")!=std::string::npos);
   assert(Tempest::Log::lines[2].find("layer=1 total-ms=9.5 solid-ms=3 alpha-ms=5 particles-ms=0.5 setup-ms=1")!=std::string::npos);
   assert(Tempest::Log::lines[0].find("total-ms=24.25")!=std::string::npos);
-  auto reset=[](){AndroidSsaoLazy38::state()={};AndroidSsaoLazy38::configure(true);};
+  auto reset=[](){AndroidSaoCompare39::state()={};AndroidSaoCompare39::configure(true);};
   auto send=[](bool fused,double mask,double apply,double total){
     std::vector<Timing> t{{"Other",total-mask-apply}};
-    t.push_back({fused ? "SSAO lazy half" : "SSAO original half",fused ? apply : mask+apply});
-    AndroidSsaoLazy38::observe(t);
+    t.push_back({fused ? "AO compare SAO" : "AO compare original",fused ? apply : mask+apply});
+    AndroidSaoCompare39::observe(t);
   };
-  reset();send(false,6,2,43);assert(AndroidSsaoLazy38::useFused());
-  send(true,0,6,40);assert(AndroidSsaoLazy38::useFused());
-  send(true,0,6,40);assert(!AndroidSsaoLazy38::useFused());
-  send(false,6,2,43);assert(!AndroidSsaoLazy38::useFused());
+  reset();send(false,6,2,43);assert(AndroidSaoCompare39::useFused());
+  send(true,0,6,40);assert(AndroidSaoCompare39::useFused());
+  send(true,0,6,40);assert(!AndroidSaoCompare39::useFused());
+  send(false,6,2,43);assert(!AndroidSaoCompare39::useFused());
   reset();for(int i=0;i<8;++i){send(false,6,2,43);send(true,0,6,40);}
-  assert(AndroidSsaoLazy38::state().decided && AndroidSsaoLazy38::useFused());
-  send(true,0,100,150);assert(AndroidSsaoLazy38::useFused()); // Choice frozen.
+  assert(AndroidSaoCompare39::state().decided && !AndroidSaoCompare39::useFused());
+  assert(Tempest::Log::lines.back().find("performance=pass")!=std::string::npos);
+  send(true,0,100,150);assert(!AndroidSaoCompare39::useFused()); // Choice frozen.
   reset();for(int i=0;i<8;++i){send(false,6,2,43);send(true,0,6,43);}
-  assert(!AndroidSsaoLazy38::useFused()); // Moving work out of the SSAO marker cannot pass the whole-frame gate.
+  assert(!AndroidSaoCompare39::useFused()); // Moving work out of the SSAO marker cannot pass the whole-frame gate.
   reset();for(int i=0;i<8;++i){send(false,6,2,43);send(true,0,7.7,39);}
-  assert(!AndroidSsaoLazy38::useFused()); // <5% SSAO gain insufficient.
+  assert(!AndroidSaoCompare39::useFused()); // <5% SSAO gain insufficient.
   reset();for(int i=0;i<8;++i){send(false,6,2,43);send(true,0,i<5?6:9,39);}
-  assert(!AndroidSsaoLazy38::useFused()); // SSAO median alone insufficient.
+  assert(!AndroidSaoCompare39::useFused()); // SSAO median alone insufficient.
   reset();for(int i=0;i<8;++i){send(false,6,2,43);send(true,0,6,i<5?39:44);}
-  assert(!AndroidSsaoLazy38::useFused()); // Frame median alone insufficient.
-  reset();AndroidSsaoLazy38::observe(std::vector<Timing>{{"SSAO original half",6},{"SSAO lazy half",6}});
-  AndroidSsaoLazy38::observe(std::vector<Timing>{{"SSAO lazy half",6},{"SSAO lazy half",6}});
-  AndroidSsaoLazy38::observe(std::vector<Timing>{{"SSAO lazy half",NAN}});
-  AndroidSsaoLazy38::observe(std::vector<Timing>{{"SSAO lazy half",-1}});
-  AndroidSsaoLazy38::observe(std::vector<Timing>{{"SSAO upsample",1}});
-  assert(AndroidSsaoLazy38::state().no==0 && AndroidSsaoLazy38::state().nf==0);
-  send(false,6,2,43);AndroidSsaoLazy38::finish();assert(!AndroidSsaoLazy38::useFused());
-  reset();AndroidSsaoLazy38::configure(false);send(false,6,2,43);
-  assert(AndroidSsaoLazy38::state().no==0 && !AndroidSsaoLazy38::useFused());
-  puts("PASS: paired SSAO aggregation, whole-frame gate, ABBA, paired wins, incomplete/mixed/invalid samples and frozen fallback.");
+  assert(!AndroidSaoCompare39::useFused()); // Frame median alone insufficient.
+  reset();AndroidSaoCompare39::observe(std::vector<Timing>{{"AO compare original",6},{"AO compare SAO",6}});
+  AndroidSaoCompare39::observe(std::vector<Timing>{{"AO compare SAO",6},{"AO compare SAO",6}});
+  AndroidSaoCompare39::observe(std::vector<Timing>{{"AO compare SAO",NAN}});
+  AndroidSaoCompare39::observe(std::vector<Timing>{{"AO compare SAO",-1}});
+  AndroidSaoCompare39::observe(std::vector<Timing>{{"SSAO upsample",1}});
+  assert(AndroidSaoCompare39::state().no==0 && AndroidSaoCompare39::state().nf==0);
+  send(false,6,2,43);AndroidSaoCompare39::finish();assert(!AndroidSaoCompare39::useFused());
+  reset();AndroidSaoCompare39::configure(false);send(false,6,2,43);
+  assert(AndroidSaoCompare39::state().no==0 && !AndroidSaoCompare39::useFused());
+  puts("PASS: paired AO comparison, mandatory original after completion, whole-frame gate, ABBA, paired wins, incomplete/mixed/invalid samples and frozen fallback.");
   puts("PASS: frame timing units, summary cadence, skipped count, top GPU passes and 24-sample budget.");
 }
 ''')
