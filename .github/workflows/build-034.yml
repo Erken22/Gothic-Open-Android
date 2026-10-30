@@ -1,0 +1,221 @@
+name: Build OpenGothic 0.6.7 FIX34 Turnip
+
+on:
+  push:
+    branches: [fix34-067-ssao-buckets]
+    paths:
+      - apply_067.py
+      - ci/prepare_turnip.sh
+      - overlay/gen_vulkan_proxy.py
+      - .github/workflows/build-034.yml
+  workflow_dispatch:
+
+concurrency:
+  group: opengothic-067-fix34-ssao-buckets
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  OPENGOTHIC_COMMIT: "18336539f4b1a8d7b325930f613811f59fbde5db"
+  BUILD_TYPE: "Release"
+
+jobs:
+  android-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Clone exact OpenGothic 0.6.7 source
+        shell: bash
+        run: |
+          git clone https://github.com/Solessfir/OpenGothic.git src
+          cd src
+          git checkout "$OPENGOTHIC_COMMIT"
+          git submodule update --init --recursive
+          test "$(git rev-parse HEAD)" = "$OPENGOTHIC_COMMIT"
+
+      - name: Apply FIX34
+        run: python3 apply_067.py src
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "8.9"
+
+      - name: Install Android/Vulkan build tools
+        shell: bash
+        run: |
+          git clone --depth 1 --branch vulkan-sdk-1.4.357.0 https://github.com/KhronosGroup/Vulkan-Headers.git Vulkan-Headers
+          mkdir -p VulkanSDK/include
+          cp -a Vulkan-Headers/include/. VulkanSDK/include/
+          echo "VULKAN_SDK=$GITHUB_WORKSPACE/VulkanSDK" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y glslang-tools ninja-build
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platforms;android-35"             "build-tools;35.0.0"             "ndk;27.0.12077973"             "cmake;3.22.1"
+
+      - name: Verify cached Vulkan dispatch and frame metrics
+        run: |
+          python3 ci/test_vulkan_namespace.py Vulkan-Headers
+          python3 ci/test_vulkan_cache.py Vulkan-Headers
+          python3 ci/test_frame_metrics.py
+          python3 ci/test_targeted_fence.py
+          python3 ci/test_turnip_materials.py
+          python3 ci/test_turnip_autotune.py Vulkan-Headers
+          python3 ci/test_depth_layout.py src Vulkan-Headers
+          python3 ci/test_render_audit.py src Vulkan-Headers
+          python3 ci/test_shader_barriers.py src Vulkan-Headers
+          python3 ci/test_ssao_buckets.py src
+          for mode in original-full original-half bucket-full bucket-half; do
+            SOURCE=src/shader/ssao/ssao.comp
+            FLAGS=()
+            if [[ "$mode" == bucket-* ]]; then SOURCE=src/shader/ssao/ssao_bucket.comp; fi
+            if [[ "$mode" == *-half ]]; then FLAGS+=(-DSSAO_HALF_RES); fi
+            glslangValidator -V --target-env vulkan1.1 -Isrc/shader "${FLAGS[@]}" "$SOURCE" -o "/tmp/ssao-$mode.spv"
+            spirv-val --target-env vulkan1.1 "/tmp/ssao-$mode.spv"
+          done
+
+      - name: Prepare Turnip and Vulkan proxy
+        shell: bash
+        run: bash ci/prepare_turnip.sh
+
+      - name: Generate FIX34 build ID
+        shell: bash
+        run: |
+          {
+            echo '#pragma once'
+            echo 'static const char* appBuild = "OpenGothic 0.6.7 FIX34 Turnip";'
+          } > src/game/build.h
+
+      - name: Configure Android ARM64
+        shell: bash
+        run: |
+          GRADLE="$RUNNER_TEMP/.gradle-actions/gradle-installations/installs/gradle-8.9/bin/gradle"
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" -S src -B src/build/android -G Ninja             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.0.12077973/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_STL=c++_shared             -DCMAKE_ANDROID_STL_TYPE=c++_shared             -DANDROID_PLATFORM=android-24             -DCMAKE_BUILD_TYPE="$BUILD_TYPE"             -DOPENGOTHIC_ANDROID_GAME=launcher             -DTEMPEST_ANDROID_GRADLE_EXECUTABLE="$GRADLE"
+
+      - name: Build release APK
+        shell: bash
+        run: |
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build src/build/android --target OpenGothic-apk -- -j2
+
+      - name: Sign and verify FIX34
+        shell: bash
+        run: |
+          APK=""
+          while IFS= read -r candidate; do
+            if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$candidate" 2>/dev/null | grep -q "package: name='org.opengothic.launcher'"; then
+              APK="$candidate"
+              break
+            fi
+          done < <(find src/build/android -path '*/build/outputs/apk/*/*.apk' -type f | sort)
+          test -n "$APK"
+
+          OUT="GothicLauncher-arm64-OpenGothic067-FIX34-TURNIP.apk"
+          base64 -d .ci/gothic_fix2.keystore.b64 > gothic_fix2.keystore
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" aligned-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks gothic_fix2.keystore             --ks-key-alias gothicfix2             --ks-pass pass:android             --key-pass pass:android             --out "$OUT" aligned-unsigned.apk
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee apk-badging.txt
+          grep -q "versionName='0.6.7'" apk-badging.txt
+
+          unzip -l "$OUT" | tee apk-files.txt
+          for lib in libopengothic_vulkan.so libvulkan_freedreno.so libadrenotools.so libmain_hook.so libhook_impl.so libc++_shared.so; do
+            grep -q "lib/arm64-v8a/$lib" apk-files.txt
+          done
+
+          unzip -p "$OUT" lib/arm64-v8a/libopengothic.so > packaged-libopengothic.so
+          unzip -p "$OUT" lib/arm64-v8a/libopengothic_vulkan.so > packaged-libopengothic_vulkan.so
+
+          READELF="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          NM="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+
+          "$READELF" -d packaged-libopengothic.so | tee needed.txt
+          grep -q "Shared library: \[libopengothic_vulkan.so\]" needed.txt
+          grep -q "Shared library: \[libc++_shared.so\]" needed.txt
+          unzip -p "$OUT" lib/arm64-v8a/libc++_shared.so > packaged-libc++_shared.so
+          "$READELF" -Ws packaged-libc++_shared.so | awk '$8=="__gxx_personality_v0" && $7!="UND" {ok=1} END {exit ok?0:1}'
+
+          "$NM" -D --defined-only packaged-libopengothic_vulkan.so | tee vulkan-exports.txt
+          grep -q "opengothic_vulkan_is_turnip" vulkan-exports.txt
+          grep -q "opengothic_vkGetInstanceProcAddr" vulkan-exports.txt
+          ! grep -Eq " [[:space:]]*vk[A-Z][A-Za-z0-9_]*$" vulkan-exports.txt
+          ! grep -Fq "Shared library: [libvulkan.so]" needed.txt
+          "$NM" -D --undefined-only packaged-libopengothic.so > engine-imports.txt
+          ! grep -Eq " U vk[A-Z][A-Za-z0-9_]*$" engine-imports.txt
+          grep -q "opengothic_vkCreateInstance" engine-imports.txt
+          if grep -Eq " (__gxx_personality_v0|__cxa_throw)$" vulkan-exports.txt; then
+            echo "ERROR: Vulkan proxy exports C++ exception runtime"
+            exit 1
+          fi
+
+          strings packaged-libopengothic.so | grep -F "OpenGothic 0.6.7 FIX34 Turnip"
+          strings packaged-libopengothic.so | grep -F "FIX23 fence waits: Turnip Adreno 650 uses targeted native completion"
+          strings packaged-libopengothic.so | grep -F "Shadow startup: standard shadow maps; unrequested virtual shadow pipelines skipped"
+          strings packaged-libopengothic.so | grep -F "FIX34 material mode:"
+          strings packaged-libopengothic.so | grep -F "FIX34 shadow: layer="
+          sha256sum "$OUT" | tee apk-sha256.txt
+          echo "FIX34 Turnip packaging/linkage verification: PASS"
+
+      - name: Preserve exact native symbols
+        shell: bash
+        run: |
+          LLVM="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          ELF=$(find src/build/android -name libopengothic.so -not -path '*/intermediates/*' -not -path '*/stripped_native_libs/*' | head -1)
+          test -n "$ELF"
+          "$LLVM/llvm-readelf" -n "$ELF" > native-build-id.txt
+          "$LLVM/llvm-readelf" -n packaged-libopengothic.so > packaged-build-id.txt
+          test "$(sed -n 's/.*Build ID: //p' native-build-id.txt)" = "$(sed -n 's/.*Build ID: //p' packaged-build-id.txt)"
+          "$LLVM/llvm-nm" -n -C "$ELF" > native-symbols.txt
+          grep -q 'MainWindow::onWorldLoaded' native-symbols.txt
+          tar -czf FIX34-native-symbols.tar.gz native-symbols.txt native-build-id.txt packaged-build-id.txt
+          strings packaged-libopengothic_vulkan.so | grep -F 'FIX34 Vulkan dispatch: cached entry points; call tracing disabled'
+          strings packaged-libopengothic_vulkan.so | grep -F 'FIX34 Turnip autotune: algo=%s flags=%s'
+          strings packaged-libopengothic.so | grep -F 'FIX34 frame:'
+          strings packaged-libopengothic.so | grep -F 'FIX34 GPU sample:'
+          ! strings packaged-libopengothic_vulkan.so | grep -F 'Vulkan wait stack:'
+          ! strings packaged-libopengothic_vulkan.so | grep -F 'Vulkan pending:'
+
+      - name: Upload verified FIX34 artifact
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenGothic-FIX34-verified
+          path: |
+            GothicLauncher-arm64-OpenGothic067-FIX34-TURNIP.apk
+            apk-sha256.txt
+            apk-signature.txt
+            apk-badging.txt
+            needed.txt
+            vulkan-exports.txt
+          retention-days: 30
+
+      - name: Preserve failed linkage diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FIX34-linkage-diagnostics
+          path: |
+            packaged-libopengothic.so
+            packaged-libopengothic_vulkan.so
+            needed.txt
+            vulkan-exports.txt
+            apk-signature.txt
+            apk-badging.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release delete exact-067-fix34 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create exact-067-fix34             GothicLauncher-arm64-OpenGothic067-FIX34-TURNIP.apk             apk-badging.txt apk-sha256.txt apk-signature.txt needed.txt vulkan-exports.txt FIX34-native-symbols.tar.gz             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "OpenGothic 0.6.7 FIX34 — measured SSAO bucket addressing"             --notes "Remove rejected FIX33 subgroup experiment and feature requests. Separate SSAO candidate uses constant-index switch cases for its 25 private hit weights. Preserve sampling, arithmetic order, convergence, resolution and resolve. Eight GPU pairs select candidate only for >5% median gain and >=6 wins; otherwise original. Same package and update signature. Phone FPS and visual validation pending."             --prerelease

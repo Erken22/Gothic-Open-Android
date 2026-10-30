@@ -47,3 +47,4 @@ with tempfile.TemporaryDirectory(prefix="opengothic-vulkan-test-") as tmp:
     assert " opengothic_vkCreateInstance" in exports
     assert not any(line.split()[-1].startswith("vk") for line in exports.splitlines())
     print("PASS: original missing-symbol failure reproduced; private proxy loads and binds correctly with system Vulkan preloaded.")
+

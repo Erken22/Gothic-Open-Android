@@ -49,28 +49,28 @@ int main(){
   assert(Tempest::Log::lines[0].find("total-ms=24.25")!=std::string::npos);
   auto resetTune=[](){AndroidSsaoTuner::states()={};AndroidSsaoTuner::configure(true);};
   resetTune();
-  AndroidSsaoTuner::observe("SSAO original full",10);assert(AndroidSsaoTuner::useWave(false));
-  AndroidSsaoTuner::observe("SSAO wave full",8);assert(AndroidSsaoTuner::useWave(false));
-  AndroidSsaoTuner::observe("SSAO wave full",8);assert(!AndroidSsaoTuner::useWave(false));
-  AndroidSsaoTuner::observe("SSAO original full",10);assert(!AndroidSsaoTuner::useWave(false)); // ABBA order balances drift.
-  resetTune();assert(!AndroidSsaoTuner::useWave(false));
+  AndroidSsaoTuner::observe("SSAO original full",10);assert(AndroidSsaoTuner::useBucket(false));
+  AndroidSsaoTuner::observe("SSAO bucket full",8);assert(AndroidSsaoTuner::useBucket(false));
+  AndroidSsaoTuner::observe("SSAO bucket full",8);assert(!AndroidSsaoTuner::useBucket(false));
+  AndroidSsaoTuner::observe("SSAO original full",10);assert(!AndroidSsaoTuner::useBucket(false)); // ABBA order balances drift.
+  resetTune();assert(!AndroidSsaoTuner::useBucket(false));
   for(int i=0;i<8;++i){
-    AndroidSsaoTuner::observe("SSAO original full",10);assert(AndroidSsaoTuner::useWave(false));
-    AndroidSsaoTuner::observe("SSAO wave full",8);
+    AndroidSsaoTuner::observe("SSAO original full",10);assert(AndroidSsaoTuner::useBucket(false));
+    AndroidSsaoTuner::observe("SSAO bucket full",8);
   }
-  assert(AndroidSsaoTuner::states()[0].decided && AndroidSsaoTuner::useWave(false));
-  assert(!AndroidSsaoTuner::useWave(true));
-  AndroidSsaoTuner::observe("SSAO wave full",100);assert(AndroidSsaoTuner::useWave(false));
-  resetTune();for(int i=0;i<8;++i){AndroidSsaoTuner::observe("SSAO original half",10);AndroidSsaoTuner::observe("SSAO wave half",9.6);}
-  assert(!AndroidSsaoTuner::useWave(true)); // <5% improvement retains baseline.
-  resetTune();for(int i=0;i<8;++i){AndroidSsaoTuner::observe("SSAO original full",10);AndroidSsaoTuner::observe("SSAO wave full",i<5?8:11);}
-  assert(!AndroidSsaoTuner::useWave(false)); // Median alone insufficient: need6 paired wins.
-  resetTune();AndroidSsaoTuner::observe("SSAO blur",1);AndroidSsaoTuner::observe("SSAO wave full",0);
-  AndroidSsaoTuner::observe("SSAO wave full",NAN);assert(AndroidSsaoTuner::states()[0].ns==0);
-  AndroidSsaoTuner::observe("SSAO original full",10);assert(AndroidSsaoTuner::useWave(false));
-  AndroidSsaoTuner::finishAll();assert(!AndroidSsaoTuner::useWave(false)); // Partial tests fall back.
+  assert(AndroidSsaoTuner::states()[0].decided && AndroidSsaoTuner::useBucket(false));
+  assert(!AndroidSsaoTuner::useBucket(true));
+  AndroidSsaoTuner::observe("SSAO bucket full",100);assert(AndroidSsaoTuner::useBucket(false));
+  resetTune();for(int i=0;i<8;++i){AndroidSsaoTuner::observe("SSAO original half",10);AndroidSsaoTuner::observe("SSAO bucket half",9.6);}
+  assert(!AndroidSsaoTuner::useBucket(true)); // <5% improvement retains baseline.
+  resetTune();for(int i=0;i<8;++i){AndroidSsaoTuner::observe("SSAO original full",10);AndroidSsaoTuner::observe("SSAO bucket full",i<5?8:11);}
+  assert(!AndroidSsaoTuner::useBucket(false)); // Median alone insufficient: need6 paired wins.
+  resetTune();AndroidSsaoTuner::observe("SSAO blur",1);AndroidSsaoTuner::observe("SSAO bucket full",0);
+  AndroidSsaoTuner::observe("SSAO bucket full",NAN);assert(AndroidSsaoTuner::states()[0].ns==0);
+  AndroidSsaoTuner::observe("SSAO original full",10);assert(AndroidSsaoTuner::useBucket(false));
+  AndroidSsaoTuner::finishAll();assert(!AndroidSsaoTuner::useBucket(false)); // Partial tests fall back.
   resetTune();AndroidSsaoTuner::configure(false);AndroidSsaoTuner::observe("SSAO original full",10);
-  assert(!AndroidSsaoTuner::useWave(false) && AndroidSsaoTuner::states()[0].no==0);
+  assert(!AndroidSsaoTuner::useBucket(false) && AndroidSsaoTuner::states()[0].no==0);
   puts("PASS: frame timing units, summary cadence, skipped count, top GPU passes and 24-sample budget.");
 }
 ''')

@@ -17,3 +17,13 @@ CI host tests, four original/candidate full/half SPIR-V compilations and validat
 APK: https://github.com/Erken22/Gothic-Open-Android/releases/download/exact-067-fix33/GothicLauncher-arm64-OpenGothic067-FIX33-TURNIP.apk
 
 Next device log: record before startup; inspect FIX33 subgroup support size/arithmetic/uniform-flow, SSAO A/B startup, eight samples per path for the active full/half mode, final SSAO choice and compiler stats for ssao_wave.comp. If unsupported, candidate is not compiled or selected. If incomplete or slower, original remains. Compare within-recording paired timings; moving camera/scene changes and thermals confound cross-build FPS. First 30 seconds fixed camera/settings, then move to check graphics. Multi-subgroup shader branch retains original atomics/barriers even when the candidate pipeline is selected.
+
+## Phone result — rejected on 2026-10-30
+
+`logcat_recording_2026-10-30_03-55-29.zip`, Adreno 650 / bundled Turnip:
+8 original and 8 subgroup SSAO half-resolution samples. Median original
+8.2510415 ms; subgroup 9.390729 ms (+13.81265%); candidate wins 0/8.
+Automatic selector retained original. Half-resolution compiler instruction count
+rose from 811 to 893; registers remained 16. These are compile-time statistics,
+not measured hardware occupancy or stalls. No GPU fault/crash in this recording.
+FIX34 removes the subgroup shaders, capability probes and feature enablement.
