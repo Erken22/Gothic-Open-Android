@@ -48,3 +48,13 @@ All cases passed the software-driver pixel assertions before the format audit be
 Post-build inspection found modern DXC inferring R32f/Rg32f/Rgba32f storage-image formats from float HLSL types, inconsistent with the SDK backend's R16_SFLOAT/R8G8_UNORM/R8G8B8A8_SNORM images and the R8_UNORM output. A passing software-driver pixel test did not catch that Vulkan contract violation. Explicit vk::image_format attributes now cover all 15 RWTexture declarations: r16f depth/mips, rgba8snorm normals, rg8 AO/blur, r8 importance/output, r32ui counters. The FP32 calculation policy is unchanged.
 
 CI now reflects every named storage output from all 33 generated SPIR-V modules, asserts its exact backend format, and runs all three whole-chain image tests with mandatory Khronos validation and a callback failing on any validation error. Corrected build pending; the earlier c87d51b APK is not accepted for delivery.
+
+## Verified corrected delivery
+
+Corrected code commit: 0e5c3a6314b3326d7df55b9c898e9b6c5646d51d. GitHub Actions run 42293992954, job 128154378587 completed successfully on 2026-11-06. All 33 FP32 modules passed per-resource storage-image reflection and spirv-val. Actual constants/controller tests, baseline integration checks and all three complete-chain GPU cases passed with mandatory Khronos validation; no validation errors. CI llvmpipe LLVM 20.1.2 produced the same neutral sky/flat outputs and contact responses (native odd-size mean 245.531).
+
+Android ARM64 build succeeded in 10m27s. Package/version, bundled Turnip/private Vulkan/C++ linkage, license asset, exact native symbol/build-ID match and original update certificate were verified. Certificate SHA256: 18bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611.
+
+Published prerelease tag exact-067-fix46 points to the corrected commit above. APK GothicLauncher-arm64-OpenGothic067-FIX46-TURNIP.apk, 22,913,981 bytes, SHA256 031bb4667813d82c4b8b96daf89d6a8e59cf943e81f586f8218442201594f78f. Release asset digest matches the signed CI output. Earlier c87d51b release was replaced by the corrected artifact. This audit-only update is on a separate delivery branch to avoid rebuilding or moving the verified binary tag.
+
+Phone FPS, appearance, motion and lifecycle behavior remain unmeasured for this corrected APK. Default Compare measures bounded original/CACAO whole-chain and whole-frame timings then returns Original. No phone performance gain is claimed.
