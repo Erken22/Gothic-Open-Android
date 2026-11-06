@@ -13,7 +13,28 @@ for directory in ['inc','src']:
 bind=dest/'src/ffx_cacao_bindings.hlsl'
 s=bind.read_text()
 assert 'g_DepthIn.Load(int3(coord, 0), offset)' in s
-bind.write_text(s.replace('.Load(int3(coord, 0), offset)', '.Load(int3(coord + offset, 0))'))
+s=s.replace('.Load(int3(coord, 0), offset)', '.Load(int3(coord + offset, 0))')
+# Raw texture Load does not clamp. Also keep guide/AO border reads in range.
+s=s.replace('return g_DepthIn.Load(int3(coord, 0));',
+            'return g_DepthIn.Load(int3(clamp(coord, int2(0,0), int2(g_FFX_CACAO_Consts.DepthBufferDimensions)-1), 0));')
+s=s.replace('return g_DepthIn.Load(int3(coord + offset, 0));',
+            'return g_DepthIn.Load(int3(clamp(coord + offset, int2(0,0), int2(g_FFX_CACAO_Consts.DepthBufferDimensions)-1), 0));')
+s=s.replace('return g_BilateralUpscaleInput.Load(int4(coord, index, 0));',
+            'coord = clamp(coord, int2(0,0), int2(g_FFX_CACAO_Consts.SSAOBufferDimensions)-1);\n\treturn g_BilateralUpscaleInput.Load(int4(coord, index, 0));')
+s=s.replace('return g_BilateralUpscaleDownscaledDepth.Load(int4(coord, index, 0));',
+            'coord = clamp(coord, int2(0,0), int2(g_FFX_CACAO_Consts.DeinterleavedDepthBufferDimensions)-1);\n\treturn g_BilateralUpscaleDownscaledDepth.Load(int4(coord, index, 0));')
+s=s.replace('return g_BilateralUpscaleDepth.Load(int3(coord + offset, 0));',
+            'return g_BilateralUpscaleDepth.Load(int3(clamp(coord + offset, int2(0,0), int2(g_FFX_CACAO_Consts.DepthBufferDimensions)-1), 0));')
+bind.write_text(s)
+shader=dest/'src/ffx_cacao.hlsl';s=shader.read_text()
+old='uint2 imageCoord = (gid * uint2(FFX_CACAO_BILATERAL_UPSCALE_WIDTH, FFX_CACAO_BILATERAL_UPSCALE_HEIGHT)) + bufferCoord - 2;'
+assert s.count(old)==2
+s=s.replace(old,'int2 imageCoord = int2((gid * uint2(FFX_CACAO_BILATERAL_UPSCALE_WIDTH, FFX_CACAO_BILATERAL_UPSCALE_HEIGHT)) + bufferCoord) - 2;')
+# Signed coordinates avoid uint underflow at left/top halo. Bit parity keeps
+# negative halo coordinates in valid deinterleaved array layers (0..3).
+for term in ['p.x','p.y','imageCoord.x','imageCoord.y']:
+    s=s.replace(term+' % 2','('+term+' & 1)')
+shader.write_text(s)
 base=[dxc,'-Wno-conversion','-spirv','-T','cs_6_2','-fspv-target-env=vulkan1.1',
       '-fvk-s-shift','0','0','-fvk-b-shift','10','0','-fvk-t-shift','20','0','-fvk-u-shift','30','0']
 (dest/'src/PrecompiledShadersSPIRV').mkdir(exist_ok=True)

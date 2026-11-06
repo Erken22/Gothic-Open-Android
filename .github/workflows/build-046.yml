@@ -14,6 +14,7 @@ on:
       - prepare_cacao46.py
       - vcacao46.inc
       - ci/test_cacao46.py
+      - ci/test_cacao46_gpu.cpp
       - ci/test_shadow45.py
       - ci/test_fix43.py
       - FIX46_AUDIT.md
@@ -80,7 +81,7 @@ jobs:
           cp -a Vulkan-Headers/include/. VulkanSDK/include/
           echo "VULKAN_SDK=$GITHUB_WORKSPACE/VulkanSDK" >> "$GITHUB_ENV"
           sudo apt-get update
-          sudo apt-get install -y glslang-tools ninja-build
+          sudo apt-get install -y glslang-tools ninja-build libvulkan1 mesa-vulkan-drivers
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platforms;android-35"             "build-tools;35.0.0"             "ndk;27.0.12077973"             "cmake;3.22.1"
 
       - name: Prepare pinned CACAO and apply FIX46
@@ -97,6 +98,12 @@ jobs:
           python3 prepare_cacao46.py src cacao46 dxc46/bin/dxc
           python3 apply_fix46.py src
           python3 ci/test_cacao46.py src
+          g++ -w -O1 -std=c++20 -DFFX_CACAO_ENABLE_VULKAN -IVulkan-Headers/include -Isrc/lib/Tempest/Engine -Isrc/lib/Tempest/Engine/thirdparty/cacao46/inc ci/test_cacao46_gpu.cpp src/lib/Tempest/Engine/thirdparty/cacao46/src/ffx_cacao.cpp src/lib/Tempest/Engine/thirdparty/cacao46/src/ffx_cacao_impl.cpp -l:libvulkan.so.1 -o /tmp/cacao46-gpu-test
+          LVP=$(find /usr/share/vulkan/icd.d -name '*lvp*' -print -quit)
+          test -n "$LVP"
+          VK_ICD_FILENAMES="$LVP" stdbuf -oL /tmp/cacao46-gpu-test
+          VK_ICD_FILENAMES="$LVP" stdbuf -oL /tmp/cacao46-gpu-test odd
+          VK_ICD_FILENAMES="$LVP" stdbuf -oL /tmp/cacao46-gpu-test odd native
           for shader in src/lib/Tempest/Engine/thirdparty/cacao46/src/PrecompiledShadersSPIRV/*.spv; do
             spirv-val --target-env vulkan1.1 "$shader"
           done
