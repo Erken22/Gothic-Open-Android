@@ -7,14 +7,38 @@ vendor=engine/'thirdparty/cacao46'
 modules=list((vendor/'src/PrecompiledShadersSPIRV').glob('*.spv'))
 assert len(modules)==33,len(modules)
 capabilities=set();max_threads=0
+image_formats=set();seen_resources=set()
+expected_formats={
+ 'g_ClearLoadCounter_LoadCounter':'R32ui','g_ImportanceBLoadCounter':'R32ui',
+ 'g_EdgeSensitiveBlur_Output':'Rg8','g_SSAOOutput':'Rg8',
+ 'g_ApplyOutput':'R8','g_BilateralUpscaleOutput':'R8',
+ 'g_PrepareDepthsOut':'R16f','g_PrepareNormals_NormalOut':'Rgba8Snorm',
+ 'g_ImportanceOut':'R8','g_ImportanceAOut':'R8','g_ImportanceBOut':'R8',
+ **{f'g_PrepareDepthsAndMips_OutMip{i}':'R16f' for i in range(4)},
+}
 for module in modules:
     header=pathlib.Path(str(module)[:-4]).read_text()
     capabilities.update(re.findall(r'OpCapability (\w+)',header))
     assert not re.search(r'OpTypeFloat 16\b|OpCapability Float16\b',header)
+    types={}
+    pointers={}
+    for line in header.splitlines():
+        m=re.search(r'(%\S+)\s*=\s*OpTypeImage\s+%\S+\s+\S+\s+\d+\s+\d+\s+\d+\s+2\s+(\w+)',line)
+        if m:types[m[1]]=m[2];image_formats.add(m[2])
+        m=re.search(r'(%\S+)\s*=\s*OpTypePointer\s+UniformConstant\s+(%\S+)',line)
+        if m:pointers[m[1]]=m[2]
+    for name,expected in expected_formats.items():
+        m=re.search(r'%'+name+r'\s*=\s*OpVariable\s+(%\S+)\s+UniformConstant',header)
+        if m:
+            actual=types[pointers[m[1]]]
+            assert actual==expected,(module.name,name,actual,expected)
+            seen_resources.add(name)
     for x,y,z in re.findall(r'LocalSize (\d+) (\d+) (\d+)',header):
         max_threads=max(max_threads,int(x)*int(y)*int(z))
 assert capabilities <= {'Shader','Image1D','Sampled1D','StorageImageExtendedFormats','ImageGatherExtended'},capabilities
 assert max_threads<=256,max_threads
+assert seen_resources==set(expected_formats),(seen_resources,set(expected_formats))
+assert image_formats=={'R32ui','Rg8','R8','R16f','Rgba8Snorm'},image_formats
 
 with tempfile.TemporaryDirectory(prefix='cacao46-') as tmp:
     p=pathlib.Path(tmp);(p/'Tempest').mkdir()

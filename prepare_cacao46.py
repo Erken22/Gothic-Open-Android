@@ -12,6 +12,22 @@ for directory in ['inc','src']:
     shutil.copytree(vendor/'ffx-cacao'/directory,dest/directory,dirs_exist_ok=True)
 bind=dest/'src/ffx_cacao_bindings.hlsl'
 s=bind.read_text()
+# DXC otherwise infers R32f/Rg32f/Rgba32f from HLSL float types. Vulkan
+# storage image formats must match the backend's actual allocated image views.
+formats={
+ 'g_ClearLoadCounter_LoadCounter':'r32ui',
+ 'g_EdgeSensitiveBlur_Output':'rg8', 'g_SSAOOutput':'rg8',
+ 'g_ApplyOutput':'r8', 'g_BilateralUpscaleOutput':'r8',
+ 'g_PrepareDepthsOut':'r16f', 'g_PrepareNormals_NormalOut':'rgba8snorm',
+ 'g_ImportanceOut':'r8', 'g_ImportanceAOut':'r8', 'g_ImportanceBOut':'r8',
+ 'g_ImportanceBLoadCounter':'r32ui',
+ **{f'g_PrepareDepthsAndMips_OutMip{i}':'r16f' for i in range(4)},
+}
+for name,fmt in formats.items():
+    pattern=r'^(RWTexture\w*<[^>]+>\s+'+name+r'\s*:)'
+    s,n=re.subn(pattern,'[[vk::image_format("'+fmt+'")]] '+r'\1',s,flags=re.M)
+    assert n==1,(name,n)
+assert len(formats)==len(re.findall(r'^\[\[vk::image_format',s,re.M))==15
 assert 'g_DepthIn.Load(int3(coord, 0), offset)' in s
 s=s.replace('.Load(int3(coord, 0), offset)', '.Load(int3(coord + offset, 0))')
 # Raw texture Load does not clamp. Also keep guide/AO border reads in range.

@@ -8,10 +8,23 @@
 #include <cstring>
 #include <vector>
 static void ok(VkResult r){if(r!=VK_SUCCESS){std::fprintf(stderr,"VkResult=%d\n",int(r));std::abort();}}
+static unsigned validationErrors=0;
+static VKAPI_ATTR VkBool32 VKAPI_CALL validation(VkDebugUtilsMessageSeverityFlagBitsEXT severity,VkDebugUtilsMessageTypeFlagsEXT,const VkDebugUtilsMessengerCallbackDataEXT* data,void*) {
+ if(severity&VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT){++validationErrors;std::fprintf(stderr,"VALIDATION ERROR: %s\n",data->pMessage);}
+ return VK_FALSE;
+}
 int main(int argc,char** argv){
  VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};app.apiVersion=VK_API_VERSION_1_1;
  VkInstanceCreateInfo ii{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};ii.pApplicationInfo=&app;
+ const char* layer="VK_LAYER_KHRONOS_validation";const char* extension=VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+ ii.enabledLayerCount=1;ii.ppEnabledLayerNames=&layer;ii.enabledExtensionCount=1;ii.ppEnabledExtensionNames=&extension;
+ VkDebugUtilsMessengerCreateInfoEXT debug{VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
+ debug.messageSeverity=VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+ debug.messageType=VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT|VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT|VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;debug.pfnUserCallback=validation;ii.pNext=&debug;
  VkInstance instance{};ok(vkCreateInstance(&ii,nullptr,&instance));
+ auto createDebug=reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance,"vkCreateDebugUtilsMessengerEXT"));
+ auto destroyDebug=reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance,"vkDestroyDebugUtilsMessengerEXT"));assert(createDebug && destroyDebug);
+ VkDebugUtilsMessengerEXT messenger{};ok(createDebug(instance,&debug,nullptr,&messenger));
  uint32_t count=0;ok(vkEnumeratePhysicalDevices(instance,&count,nullptr));assert(count);
  std::vector<VkPhysicalDevice> devices(count);ok(vkEnumeratePhysicalDevices(instance,&count,devices.data()));auto physical=devices[0];
  VkPhysicalDeviceProperties props{};vkGetPhysicalDeviceProperties(physical,&props);std::printf("Device: %s (correctness only)\n",props.deviceName);std::fflush(stdout);
@@ -73,6 +86,7 @@ int main(int argc,char** argv){
  FFX_CACAO_VkDestroyScreenSizeDependentResources(context);FFX_CACAO_VkDestroyContext(context);std::free(context);
  for(auto b:{upload,download}){vkDestroyBuffer(device,b.buffer,nullptr);vkFreeMemory(device,b.memory,nullptr);}
  for(auto i:{depth,output}){vkDestroyImageView(device,i.view,nullptr);vkDestroyImage(device,i.image,nullptr);vkFreeMemory(device,i.memory,nullptr);}
- vkDestroyCommandPool(device,pool,nullptr);vkDestroyDevice(device,nullptr);vkDestroyInstance(instance,nullptr);
+ vkDestroyCommandPool(device,pool,nullptr);vkDestroyDevice(device,nullptr);destroyDebug(instance,messenger,nullptr);vkDestroyInstance(instance,nullptr);
+ assert(validationErrors==0);
  std::puts("PASS: complete upstream Vulkan FP32 chain, sky/flat neutral AO and nontrivial contact response");
 }

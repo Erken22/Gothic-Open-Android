@@ -41,4 +41,10 @@ Final complete-chain cases, HIGH quality and depth-derived normals:
 - 129x131 downsampled: sky and flat 255 everywhere, contact minimum 126, mean 240.478.
 - 129x131 native: sky and flat 255 everywhere, contact minimum 132, mean 245.530.
 
-All cases pass; CI runs the same headless Vulkan test in addition to unit/SPIR-V/native checks. Contact numbers are synthetic functional responses, not image equivalence to original SSAO or phone visual validation. Updated Android build pending.
+All cases passed the software-driver pixel assertions before the format audit below. Contact numbers are synthetic functional responses, not image equivalence to original SSAO or phone visual validation.
+
+## Storage image format correction
+
+Post-build inspection found modern DXC inferring R32f/Rg32f/Rgba32f storage-image formats from float HLSL types, inconsistent with the SDK backend's R16_SFLOAT/R8G8_UNORM/R8G8B8A8_SNORM images and the R8_UNORM output. A passing software-driver pixel test did not catch that Vulkan contract violation. Explicit vk::image_format attributes now cover all 15 RWTexture declarations: r16f depth/mips, rgba8snorm normals, rg8 AO/blur, r8 importance/output, r32ui counters. The FP32 calculation policy is unchanged.
+
+CI now reflects every named storage output from all 33 generated SPIR-V modules, asserts its exact backend format, and runs all three whole-chain image tests with mandatory Khronos validation and a callback failing on any validation error. Corrected build pending; the earlier c87d51b APK is not accepted for delivery.
