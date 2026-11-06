@@ -22,4 +22,11 @@ Use the same save and graphics settings as FIX43. AO method Original, Fog shadow
 
 ## Build status
 
-Host helper/integration tests passed. CI/release verification pending at initial commit.
+Host and CI helper/integration tests passed. GitHub Actions run 42237140853, job 127957601606 completed successfully. Native/Gradle build took 10m21s. Build commit and release tag exact-067-fix45 both point to 7f8115011b3031faae435f4cf8c8567bc3e51fa4.
+
+APK: GothicLauncher-arm64-OpenGothic067-FIX45-TURNIP.apk, 22750071 bytes. SHA-256: 107e285b38e2de2b90ab3111152663b14767d51ab497eb7fbcfc6c8af4022cb1. The build's sha256sum matches GitHub's release-asset digest. Signer SHA-256: 18bff2093896acea815c4fbfc342f72a694fd91d46b4ece5ab3e8e86e13ff611. Package org.opengothic.launcher, version 0.6.7. Private Vulkan/C++ linkage, embedded diagnostic strings and native build-ID/symbol preservation passed.
+
+Release: https://github.com/Erken22/Gothic-Open-Android/releases/tag/exact-067-fix45
+CI: https://github.com/Erken22/Gothic-Open-Android/actions/runs/42237140853
+
+Additional source finding: Sky::updateLight computes solar direction from millisecond game time, while WorldView::preFrameUpdate recomputes both shadow matrices. Exact projection reuse can therefore be scarce even while the camera is still. Phone counters must establish its actual frequency; a stable projection may be required before caching. Source masks conservatively retain types/material flags ever added to a live command, so stale mixed flags can underestimate the candidate scope rather than falsely certify a static packet. Device FPS, cacheability and image stability remain unverified.
